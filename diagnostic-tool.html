@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustAI Diagnostic Tool</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #00ff00;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1, h2 { margin-top: 20px; margin-bottom: 10px; color: #00ffff; }
+        .section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border-left: 3px solid #00ff00;
+            background: #1a1a1a;
+        }
+        .result { 
+            padding: 10px; 
+            margin: 5px 0; 
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success { background: #0a3a0a; color: #00ff00; }
+        .error { background: #3a0a0a; color: #ff0000; }
+        .warning { background: #3a3a0a; color: #ffff00; }
+        .info { background: #0a1a3a; color: #00ffff; }
+        button { 
+            padding: 10px 15px; 
+            margin: 5px 5px 5px 0;
+            background: #00ff00;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        button:hover { background: #00ccff; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        textarea { width: 100%; height: 200px; background: #000; color: #0f0; font-family: monospace; padding: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 TrustAI Diagnostic Tool</h1>
+        <p>Testing backend connectivity, frontend configuration, and full login flow</p>
+
+        <div class="section">
+            <h2>🚀 Quick Diagnostics</h2>
+            <button onclick="runAllTests()">Run All Tests</button>
+            <button onclick="testBackendHealthy()">Test Backend</button>
+            <button onclick="testCORS()">Test CORS</button>
+            <button onclick="testFullLoginFlow()">Full Login Test</button>
+            <button onclick="clearResults()">Clear Results</button>
+            <div id="quickResults"></div>
+        </div>
+
+        <div class="grid">
+            <div class="section">
+                <h2>📋 Configuration</h2>
+                <div id="configResults"></div>
+            </div>
+            <div class="section">
+                <h2>🌐 Backend Tests</h2>
+                <div id="backendResults"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📨 API Request Testing</h2>
+            <textarea id="requestBody" placeholder="Request body (auto-filled)">{"email":"admin@trustai.local","password":"admin123"}</textarea>
+            <br>
+            <button onclick="testCustomRequest()">Send Test Request</button>
+            <div id="requestResults"></div>
+        </div>
+
+        <div class="section">
+            <h2>📊 Detailed Results</h2>
+            <textarea id="detailedResults" placeholder="Detailed test results will appear here..." readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        const detailedLog = [];
+        const API_URL = 'http://localhost:9999/api';
+        const FRONTEND_URL = 'http://localhost:5173';
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}`;
+            console.log(logMessage);
+            detailedLog.push(logMessage);
+            updateDetailedResults();
+        }
+
+        function updateDetailedResults() {
+            document.getElementById('detailedResults').value = detailedLog.join('\n');
+            document.getElementById('detailedResults').scrollTop = document.getElementById('detailedResults').scrollHeight;
+        }
+
+        function addResult(elementId, message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.textContent = message;
+            document.getElementById(elementId).appendChild(div);
+            log(message, type);
+        }
+
+        function clearResults() {
+            detailedLog.length = 0;
+            document.getElementById('quickResults').innerHTML = '';
+            document.getElementById('configResults').innerHTML = '';
+            document.getElementById('backendResults').innerHTML = '';
+            document.getElementById('requestResults').innerHTML = '';
+            updateDetailedResults();
+        }
+
+        async function testBackendHealthy() {
+            clearResults();
+            log('Testing backend health...');
+            
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult('quickResults', `✅ Backend is running`, 'success');
+                    addResult('backendResults', `Server Status: ${data.status}`, 'success');
+                    addResult('backendResults', `JWT Secret Set: ${data.googleConfig.clientIdSet ? 'Yes' : 'No'}`, 'success');
+                    addResult('backendResults', `Google Config: ${data.googleConfig.clientIdSet ? 'Yes' : 'No'}`, 'success');
+                } else {
+                    addResult('quickResults', `❌ Backend returned error: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                addResult('quickResults', `❌ Cannot connect to backend: ${error.message}`, 'error');
+                addResult('backendResults', `Error: ${API_URL} is unreachable`, 'error');
+            }
+        }
+
+        async function testCORS() {
+            clearResults();
+            log('Testing CORS...');
+            
+            try {
+                const response = await fetch(`${API_URL}/health`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin
+                    }
+                });
+                
+                const corsHeader = response.headers.get('Access-Control-Allow-Origin');
+                if (corsHeader) {
+                    addResult('quickResults', `✅ CORS enabled for: ${corsHeader}`, 'success');
+                } else {
+                    addResult('quickResults', `⚠️ No CORS headers found`, 'warning');
+                }
+            } catch (error) {
+                addResult('quickResults', `⚠️ CORS test inconclusive: ${error.message}`, 'warning');
+            }
+        }
+
+        async function testFullLoginFlow() {
+            clearResults();
+            log('Starting full login flow test...');
+            
+            // Step 1: Check configuration
+            addResult('configResults', `API URL: ${API_URL}`, 'info');
+            addResult('configResults', `Frontend URL: ${FRONTEND_URL}`, 'info');
+            
+            // Step 2: Test backend
+            try {
+                const health = await fetch(`${API_URL}/health`);
+                if (health.ok) {
+                    addResult('backendResults', `✅ Backend healthy`, 'success');
+                } else {
+                    addResult('backendResults', `❌ Backend unhealthy`, 'error');
+                    return;
+                }
+            } catch (error) {
+                addResult('backendResults', `❌ Cannot reach backend`, 'error');
+                return;
+            }
+            
+            // Step 3: Test login
+            log('Attempting login with admin credentials...');
+            try {
+                const loginRes = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'admin@trustai.local',
+                        password: 'admin123'
+                    })
+                });
+                
+                const loginData = await loginRes.json();
+                
+                if (loginData.success) {
+                    addResult('quickResults', `✅ Login successful!`, 'success');
+                    addResult('requestResults', `Token received: ${loginData.data.token.substring(0, 50)}...`, 'success');
+                    addResult('requestResults', `User: ${loginData.data.user.email}`, 'info');
+                } else {
+                    addResult('quickResults', `❌ Login failed: ${loginData.message}`, 'error');
+                }
+            } catch (error) {
+                addResult('quickResults', `❌ Login error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCustomRequest() {
+            const body = document.getElementById('requestBody').value;
+            const results = document.getElementById('requestResults');
+            results.innerHTML = '';
+            
+            log('Testing custom request...');
+            
+            try {
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                
+                const data = await response.json();
+                
+                addResult('requestResults', `Status: ${response.status}`, response.ok ? 'info' : 'warning');
+                addResult('requestResults', `Response: ${JSON.stringify(data, null, 2)}`, data.success ? 'success' : 'error');
+            } catch (error) {
+                addResult('requestResults', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function runAllTests() {
+            clearResults();
+            log('Running comprehensive diagnostic...\n');
+            
+            // Test 1: Configuration
+            addResult('configResults', `Testing configuration...`, 'info');
+            addResult('configResults', `API Base URL: ${API_URL}`, 'success');
+            addResult('configResults', `Origin: ${window.location.origin}`, 'info');
+            
+            // Test 2: Backend health
+            log('\nTesting backend health...');
+            await testBackendHealthy();
+            
+            // Test 3: CORS
+            log('\nTesting CORS...');
+            await testCORS();
+            
+            // Test 4: Full flow
+            log('\nTesting full login flow...');
+            await testFullLoginFlow();
+            
+            log('\n✅ Diagnostic complete!');
+        }
+
+        // Auto-run on load
+        document.addEventListener('DOMContentLoaded', () => {
+            log('TrustAI Diagnostic Tool loaded');
+            log(`Frontend URL: ${FRONTEND_URL}`);
+            log(`Backend API URL: ${API_URL}`);
+            log(`User Agent: ${navigator.userAgent}`);
+            log('');
+            log('Click "Run All Tests" to start diagnostics');
+        });
+    </script>
+</body>
+</html>

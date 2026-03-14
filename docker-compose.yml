@@ -1,0 +1,123 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: trustai-postgres
+    environment:
+      POSTGRES_USER: trustai_user
+      POSTGRES_PASSWORD: trustai_password
+      POSTGRES_DB: trustai
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      # Mount init script to restore database
+      - ./database/trustai_dump.sql:/docker-entrypoint-initdb.d/trustai_dump.sql
+      # Persist data
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trustai_user -d trustai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustai-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: trustai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustai-network
+
+  # Backend API (Node.js + Express)
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: trustai-backend
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://trustai_user:trustai_password@postgres:5432/trustai
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: info
+      PORT: 5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Hot reload for development
+      - ./apps/backend/src:/app/src
+      - ./apps/backend/package.json:/app/package.json
+      - ./apps/backend/package-lock.json:/app/package-lock.json
+      - /app/node_modules
+    networks:
+      - trustai-network
+    restart: unless-stopped
+
+  # Frontend (React + Vite)
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    container_name: trustai-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:5000
+      VITE_AI_SERVICE_URL: http://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      # Hot reload for development
+      - ./apps/frontend/src:/app/src
+      - ./apps/frontend/package.json:/app/package.json
+      - ./apps/frontend/package-lock.json:/app/package-lock.json
+      - /app/node_modules
+    networks:
+      - trustai-network
+    restart: unless-stopped
+
+  # AI Service (Python + FastAPI)
+  ai-service:
+    build:
+      context: .
+      dockerfile: apps/ai-service/Dockerfile
+    container_name: trustai-ai-service
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: info
+    volumes:
+      # Hot reload for development
+      - ./apps/ai-service:/app
+      - /app/__pycache__
+    networks:
+      - trustai-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  trustai-network:
+    driver: bridge

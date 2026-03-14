@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode variables (default) - Modern SaaS Palette */
+    --bg-primary: #F5F7FB;
+    --bg-secondary: #E5E7EB;
+    --bg-tertiary: #D1D5DB;
+    --surface: #FFFFFF;
+    --border: #E5E7EB;
+    --text-primary: #111827;
+    --text-secondary: #6B7280;
+    --text-tertiary: #9CA3AF;
+    --accent-primary: #6366F1;
+    --accent-secondary: #8B5CF6;
+    --accent-light: #818CF8;
+    --accent-lighter: #E0E7FF;
+  }
+
+  .dark {
+    /* Dark mode variables */
+    --bg-primary: #0B0F19;
+    --bg-secondary: #1a1f3a;
+    --bg-tertiary: #2D3748;
+    --surface: #1a1f3a;
+    --border: #4F46E5;
+    --text-primary: #FFFFFF;
+    --text-secondary: #D1D5DB;
+    --text-tertiary: #9CA3AF;
+    --accent-primary: #6366F1;
+    --accent-secondary: #A855F7;
+    --accent-light: #818CF8;
+    --accent-lighter: #C7D2FE;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+/* Light mode gradient backgrounds - Modern soft light */
+.light .gradient-primary {
+  @apply bg-stone-50;
+}
+
+.light .gradient-card {
+  @apply bg-white border border-gray-200 shadow-sm;
+}
+
+.light input,
+.light textarea,
+.light select {
+  @apply bg-white border border-gray-300;
+}
+
+/* Dark mode gradient backgrounds */
+.dark .gradient-primary {
+  @apply bg-gradient-to-br from-[#0B0F19] via-[#1a1f3a] to-[#0B0F19];
+}
+
+.dark .gradient-card {
+  @apply bg-[#1a1f3a] border border-indigo-500/20;
+}
+
+/* Signup page styles */
+.signup-bg {
+  background: linear-gradient(135deg, #0a0a18 0%, #15082e 25%, #0a1a38 50%, #15082e 75%, #0a0a18 100%);
+}
+
+.signup-vignette {
+  background: radial-gradient(ellipse at center, rgba(15,15,31,0) 0%, rgba(15,15,31,0.7) 100%);
+}
+
+.signup-card-glow {
+  box-shadow: 0 8px 32px rgba(147, 51, 234, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+}
+
+.signup-btn-glow {
+  box-shadow: 0 10px 30px rgba(147, 51, 234, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+}

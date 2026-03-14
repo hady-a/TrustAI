@@ -1,0 +1,25 @@
+# Node dependencies
+node_modules
+
+# build outputs
+dist
+build
+
+# environment variables
+.env
+
+# logs
+*.log
+
+# macOS files
+.DS_Store
+
+# python cache
+__pycache__
+*.pyc
+
+# editor settings
+.vscode
+
+# OS temp files
+*.tmp

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustAI Login Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #222; color: #0f0; }
+        form { margin: 20px 0; padding: 10px; border: 1px solid #0f0; }
+        input { padding: 5px; margin: 5px; width: 300px; }
+        button { padding: 10px 20px; cursor: pointer; background: #0f0; color: #222; border: none; }
+        .log { margin: 10px 0; padding: 5px; border-left: 2px solid #0f0; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+    </style>
+</head>
+<body>
+    <h1>TrustAI Login Test</h1>
+    
+    <form id="loginForm">
+        <div>
+            <label>Email:</label>
+            <input type="email" id="email" value="admin@trustai.local" required />
+        </div>
+        <div>
+            <label>Password:</label>
+            <input type="password" id="password" value="admin123" required />
+        </div>
+        <button type="submit">Login</button>
+        <button type="button" onclick="testSignup()">Test Signup</button>
+        <button type="button" onclick="clearLogs()">Clear Logs</button>
+    </form>
+
+    <div id="logs"></div>
+
+    <script>
+        const logsDiv = document.getElementById('logs');
+        const API_URL = 'http://localhost:9999/api';
+
+        function log(message, type = 'info') {
+            console.log(message);
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(div);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            logsDiv.innerHTML = '';
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            log('Starting login test...', 'info');
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                log(`Email: ${email}`, 'info');
+                log(`Password: ${password.substring(0, 3)}***`, 'info');
+                log(`API URL: ${API_URL}`, 'info');
+
+                log('Making POST request to /auth/login...', 'info');
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                log(`Response Status: ${response.status}`, 'info');
+                log(`Response Headers:`, 'info');
+                response.headers.forEach((value, key) => {
+                    log(`  ${key}: ${value}`, 'info');
+                });
+
+                const data = await response.json();
+                log(`Response Body: ${JSON.stringify(data, null, 2)}`, 'info');
+
+                if (data.success) {
+                    log(`✅ Login successful!`, 'success');
+                    log(`User ID: ${data.data.user.id}`, 'success');
+                    log(`Token: ${data.data.token.substring(0, 50)}...`, 'success');
+                    
+                    localStorage.setItem('authToken', data.data.token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    log(`Token saved to localStorage`, 'success');
+                } else {
+                    log(`❌ Login failed: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                log(`Full Error: ${JSON.stringify(error)}`, 'error');
+            }
+        });
+
+        async function testSignup() {
+            log('Starting signup test...', 'info');
+            const email = `test-${Date.now()}@example.com`;
+            const password = 'TestPassword123!';
+            
+            try {
+                log(`Creating user with email: ${email}`, 'info');
+                const response = await fetch(`${API_URL}/auth/signup`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: 'Test User',
+                        email,
+                        password,
+                    }),
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    log(`✅ Signup successful!`, 'success');
+                    log(`User ID: ${data.data.user.id}`, 'success');
+                    log(`New Email: ${email}`, 'success');
+                    document.getElementById('email').value = email;
+                    document.getElementById('password').value = password;
+                    log(`Auto-filled login form with new credentials`, 'success');
+                } else {
+                    log(`❌ Signup failed: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Signup Error: ${error.message}`, 'error');
+            }
+        }
+
+        log('Login test page loaded', 'success');
+        log(`API URL: ${API_URL}`, 'info');
+    </script>
+</body>
+</html>
