@@ -5,8 +5,14 @@ Returns: voice_score (stress probability 0-100)
 
 import os
 import logging
-import numpy as np
 from typing import Dict, Any, Optional
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    print("Warning: numpy not installed")
+    NUMPY_AVAILABLE = False
 
 try:
     import librosa

@@ -4,9 +4,15 @@ Returns: face_score (deception probability 0-100)
 """
 
 import os
-import cv2
 import logging
 from typing import Dict, Any, Optional
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    print("Warning: opencv-python not installed")
+    CV2_AVAILABLE = False
 
 try:
     from deepface import DeepFace
