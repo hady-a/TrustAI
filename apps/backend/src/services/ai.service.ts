@@ -1,5 +1,6 @@
 import { logger } from '../lib/logger';
 import { AppError } from '../lib/AppError';
+import { MockAIService } from './mockAI.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -127,17 +128,23 @@ export class AIService {
         } catch (error: any) {
             clearTimeout(timeout);
 
-            if (error.name === 'AbortError') {
-                logger.error({ userId }, 'AI microservice timed out');
-                throw new AppError('AI processing timeout', 504, 'AI_TIMEOUT');
-            }
-
-            logger.error({ err: error, userId }, '❌ AI microservice failed');
-            throw new AppError(
-                error.message || 'AI processing failed',
-                error.statusCode || 500,
-                'AI_FAILURE'
+            logger.warn(
+                { err: error, userId, modes: modes[0] },
+                '⚠️ AI microservice unavailable - using mock analysis'
             );
+
+            // Use mock service as fallback when real service is unavailable
+            try {
+                const mockResult = await MockAIService.analyze(userId, modes);
+                return mockResult as AIResponse;
+            } catch (mockError: any) {
+                logger.error({ err: mockError }, '❌ Mock service also failed');
+                throw new AppError(
+                    'Analysis service unavailable',
+                    503,
+                    'AI_SERVICE_UNAVAILABLE'
+                );
+            }
         }
     }
 
