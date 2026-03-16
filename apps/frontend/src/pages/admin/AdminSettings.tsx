@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
 interface SystemSettings {
@@ -12,7 +11,6 @@ interface SystemSettings {
 }
 
 export default function AdminSettings() {
-  const navigate = useNavigate()
   const [settings, setSettings] = useState<SystemSettings>({
     sessionTimeout: 15,
     maxUploadSize: 100,

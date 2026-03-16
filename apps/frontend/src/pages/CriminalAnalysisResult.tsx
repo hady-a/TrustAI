@@ -1,359 +1,303 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { motion } from "framer-motion"
+import api from "../lib/api"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
 interface AnalysisResult {
-  riskLevel: "Critical" | "High" | "Medium" | "Low"
-  confidence: number
-  findings: {
-    category: string
-    severity: "Critical" | "High" | "Medium" | "Low"
-    description: string
-    evidence: string[]
-  }[]
-  recommendations: string[]
-  timeline?: string
-  suspectProfile?: string
+  overall_risk_score: number
+  confidence_level: number
+  modality_breakdown: {
+    video: number
+    audio: number
+    text: number
+  }
+  detected_indicators: string[]
+  explanation_summary: string
+  audio_analysis?: {
+    transcript?: string
+    emotion?: string
+    stress_level?: number
+  }
+  video_analysis?: {
+    dominant_emotion?: string
+  }
 }
 
 export default function CriminalAnalysisResult() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<"findings" | "recommendations" | "timeline">("findings")
-  
-  // Mock data - would come from analysis backend
-  const result: AnalysisResult = {
-    riskLevel: "High",
-    confidence: 92,
-    findings: [
-      {
-        category: "Behavioral Anomalies",
-        severity: "Critical",
-        description: "Detected suspicious behavioral patterns inconsistent with stated narrative",
-        evidence: ["Timeline inconsistencies", "Contradictory statements", "Emotional responses out of pattern"],
-      },
-      {
-        category: "Evidence Discrepancies",
-        severity: "High",
-        description: "Physical evidence conflicts with witness testimony",
-        evidence: ["DNA mismatch", "Forensic timeline conflict", "Incomplete alibi verification"],
-      },
-      {
-        category: "Motive Analysis",
-        severity: "Medium",
-        description: "Potential motives identified based on case investigation",
-        evidence: ["Financial pressure", "Relationship conflicts", "Prior incidents"],
-      },
-    ],
-    recommendations: [
-      "Conduct comprehensive forensic re-examination of primary evidence",
-      "Perform polygraph examination on primary suspect",
-      "Investigate financial records for past 12 months",
-      "Interview secondary witnesses with focus on timeline verification",
-      "Cross-reference alibi claims with surveillance footage",
-    ],
-    timeline: "2024-03-06",
-    suspectProfile: "Subject shows signs of premeditation with calculated deception",
+  const { analysisId } = useParams()
+  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchAnalysisResults = async () => {
+      try {
+        if (!analysisId) {
+          setError("No analysis ID provided")
+          setLoading(false)
+          return
+        }
+
+        const response = await api.get(`/api/analyses/${analysisId}`)
+        const analysis = response.data.data
+
+        console.log("🔍 Criminal Analysis Data:", analysis)
+
+        const result: AnalysisResult = {
+          overall_risk_score: analysis.overall_risk_score || 0,
+          confidence_level: analysis.confidence_level || 0,
+          modality_breakdown: analysis.modality_breakdown || {
+            video: 0,
+            audio: 0,
+            text: 0,
+          },
+          detected_indicators: analysis.detected_indicators || [],
+          explanation_summary: analysis.explanation_summary || "Analysis complete",
+          audio_analysis: analysis.results?.audio_analysis,
+          video_analysis: analysis.results?.video_analysis,
+        }
+
+        console.log("✅ Mapped Result:", result)
+        setResult(result)
+      } catch (err: any) {
+        console.error("❌ Error fetching analysis:", err)
+        setError(err.message || "Failed to load analysis results")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAnalysisResults()
+  }, [analysisId])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-red-950 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+          <p className="text-red-200 mt-4">Loading interrogation analysis...</p>
+        </div>
+      </div>
+    )
   }
 
-  const getRiskColor = (level: string) => {
-    switch (level) {
-      case "Critical":
-        return "from-red-600 to-red-800"
-      case "High":
-        return "from-orange-600 to-red-700"
-      case "Medium":
-        return "from-yellow-600 to-orange-600"
-      case "Low":
-        return "from-green-600 to-emerald-600"
-      default:
-        return "from-gray-600 to-gray-800"
-    }
+  if (error) {
+    return (
+      <div className="min-h-screen bg-red-950 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-200 mb-4">Error: {error}</p>
+          <button onClick={() => navigate(-1)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
   }
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "Critical":
-        return "bg-red-500/20 border-red-500/50 text-red-300"
-      case "High":
-        return "bg-orange-500/20 border-orange-500/50 text-orange-300"
-      case "Medium":
-        return "bg-yellow-500/20 border-yellow-500/50 text-yellow-300"
-      case "Low":
-        return "bg-green-500/20 border-green-500/50 text-green-300"
-      default:
-        return "bg-gray-500/20 border-gray-500/50 text-gray-300"
-    }
+  if (!result) {
+    return (
+      <div className="min-h-screen bg-red-950 p-6 flex items-center justify-center">
+        <p className="text-red-200">No results available</p>
+      </div>
+    )
   }
+
+  const chartData = [
+    { name: "Face", value: result.modality_breakdown.video },
+    { name: "Voice", value: result.modality_breakdown.audio },
+    { name: "Text", value: result.modality_breakdown.text },
+  ]
+
+  const getRiskLevel = (score: number) => {
+    if (score < 25) return { label: "LOW", color: "text-green-400", bg: "bg-green-900/20" }
+    if (score < 50) return { label: "MEDIUM", color: "text-yellow-400", bg: "bg-yellow-900/20" }
+    if (score < 75) return { label: "HIGH", color: "text-orange-400", bg: "bg-orange-900/20" }
+    return { label: "CRITICAL", color: "text-red-400", bg: "bg-red-900/20" }
+  }
+
+  const riskLevel = getRiskLevel(result.overall_risk_score)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden">
-      {/* Forensic Evidence Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          animate={{ scale: [1, 1.2, 1] }}
-          transition={{ duration: 4, repeat: Infinity }}
-          className="absolute top-1/4 -left-20 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"
-        />
-        <motion.div
-          animate={{ scale: [1.2, 1, 1.2] }}
-          transition={{ duration: 5, repeat: Infinity }}
-          className="absolute bottom-1/4 -right-20 w-40 h-40 bg-red-800/15 rounded-full blur-3xl"
-        />
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-700/0 via-red-700/50 to-red-700/0" />
+    <div className="min-h-screen bg-gradient-to-br from-red-950 via-red-900 to-slate-900">
+      {/* Scan lines effect */}
+      <div className="fixed inset-0 pointer-events-none opacity-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-red-500 to-transparent animate-pulse"></div>
       </div>
 
-      <div className="relative z-10 max-w-6xl mx-auto px-6 py-20">
-        {/* Result Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9 }}
-          className="mb-16"
-        >
-          <div className="flex items-center justify-between mb-8">
+      <div className="relative z-10 max-w-7xl mx-auto p-6">
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <div className="flex justify-between items-center">
             <div>
-              <p className="text-red-400 text-lg font-semibold mb-2">⚖️ CRIMINAL ANALYSIS RESULTS</p>
-              <h1 className="text-5xl font-bold text-white">Investigation Findings</h1>
+              <p className="text-red-400 font-mono font-bold text-sm mb-2">🔍 INTERROGATION ANALYSIS</p>
+              <h1 className="text-5xl font-black text-red-100">DECEPTION ASSESSMENT REPORT</h1>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+            <button
               onClick={() => navigate("/modes")}
-              className="px-6 py-2 bg-red-600/20 border border-red-500/50 text-red-300 rounded-lg hover:bg-red-600/30 transition"
+              className="px-6 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition border border-red-500"
             >
               New Analysis
-            </motion.button>
+            </button>
           </div>
         </motion.div>
 
-        {/* Risk Assessment Card */}
+        {/* Risk Level Alert */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.1 }}
-          className={`mb-12 rounded-2xl border border-red-500/30 bg-gradient-to-br ${getRiskColor(result.riskLevel)} bg-opacity-10 p-8 overflow-hidden relative`}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`${riskLevel.bg} border-2 border-red-500 rounded-xl p-8 mb-8 backdrop-blur`}
         >
-          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-red-500 to-transparent" />
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Risk Level */}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="bg-black/40 rounded-xl p-6 border border-red-500/20 backdrop-blur"
-            >
-              <p className="text-red-400 text-sm font-semibold mb-3">RISK LEVEL</p>
-              <p className="text-4xl font-bold text-red-300 mb-2">{result.riskLevel}</p>
-              <div className="w-full bg-red-900/30 rounded-full h-2">
+          <div className="flex items-center justify-between md:flex-row flex-col gap-4">
+            <div>
+              <p className="text-red-300 text-sm font-mono mb-2">DECEPTION RISK LEVEL</p>
+              <p className={`text-6xl font-black ${riskLevel.color}`}>{riskLevel.label}</p>
+            </div>
+
+            <div className="text-right">
+              <p className="text-red-300 text-sm font-mono mb-2">OVERALL SCORE</p>
+              <p className="text-5xl font-black text-red-300">{result.overall_risk_score.toFixed(1)}</p>
+              <div className="mt-4 w-48 h-2 bg-red-900 rounded-full overflow-hidden border border-red-500">
                 <motion.div
                   initial={{ width: 0 }}
-                  animate={{ width: "75%" }}
+                  animate={{ width: `${result.overall_risk_score}%` }}
                   transition={{ duration: 1.5 }}
-                  className="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full"
+                  className="h-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-600"
                 />
               </div>
-            </motion.div>
+            </div>
 
-            {/* Confidence Score */}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="bg-black/40 rounded-xl p-6 border border-red-500/20 backdrop-blur"
-            >
-              <p className="text-red-400 text-sm font-semibold mb-3">CONFIDENCE LEVEL</p>
-              <p className="text-4xl font-bold text-red-300 mb-2">{result.confidence}%</p>
-              <div className="w-full bg-red-900/30 rounded-full h-2">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${result.confidence}%` }}
-                  transition={{ duration: 1.5 }}
-                  className="h-full bg-gradient-to-r from-green-600 to-emerald-400 rounded-full"
-                />
-              </div>
-            </motion.div>
-
-            {/* Analysis Status */}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="bg-black/40 rounded-xl p-6 border border-red-500/20 backdrop-blur"
-            >
-              <p className="text-red-400 text-sm font-semibold mb-3">ANALYSIS TIMESTAMP</p>
-              <p className="text-lg font-bold text-red-300 mb-3">{result.timeline}</p>
-              <div className="flex gap-2">
-                <span className="px-3 py-1 bg-red-500/20 border border-red-500/50 text-red-300 text-xs rounded-full font-medium">
-                  Completed
-                </span>
-              </div>
-            </motion.div>
+            <div className="text-center">
+              <p className="text-red-300 text-sm font-mono mb-2">ANALYSIS CONFIDENCE</p>
+              <p className="text-4xl font-black text-red-400">{result.confidence_level.toFixed(0)}%</p>
+              <p className="text-xs text-red-400 mt-2">Reliability: HIGH</p>
+            </div>
           </div>
         </motion.div>
 
-        {/* Tabs */}
-        <div className="mb-8 border-b border-red-500/20">
-          <div className="flex gap-8">
-            {["findings", "recommendations", "timeline"].map((tab) => (
-              <motion.button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`pb-4 font-semibold text-lg transition-colors relative ${
-                  activeTab === tab ? "text-red-400" : "text-gray-400 hover:text-gray-300"
-                }`}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                {activeTab === tab && (
-                  <motion.div
-                    layoutId="underline"
-                    className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 to-red-400"
-                  />
-                )}
-              </motion.button>
-            ))}
+        {/* Modality Breakdown */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Bar Chart */}
+          <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 backdrop-blur">
+            <h3 className="text-lg font-bold text-red-200 mb-4 font-mono">DECEPTION INDICATORS BY MODALITY</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#7f1d1d" />
+                <XAxis dataKey="name" stroke="#fca5a5" />
+                <YAxis stroke="#fca5a5" domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1f1f1f",
+                    border: "1px solid #dc2626",
+                    borderRadius: "8px",
+                  }}
+                  formatter={(value: any) => `${Number(value).toFixed(1)}%`}
+                />
+                <Bar dataKey="value" fill="#dc2626" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        </div>
 
-        {/* Findings Tab */}
-        {activeTab === "findings" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-6 mb-16"
-          >
-            {result.findings.map((finding, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className={`rounded-xl border p-6 backdrop-blur ${getSeverityColor(finding.severity)}`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-2">{finding.category}</h3>
-                    <p className="text-gray-300">{finding.description}</p>
-                  </div>
-                  <span className={`px-3 py-1 bg-black/40 rounded-full text-xs font-semibold whitespace-nowrap`}>
-                    {finding.severity}
-                  </span>
-                </div>
-                
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 mb-3 uppercase">Evidence Points</p>
-                  <div className="flex flex-wrap gap-2">
-                    {finding.evidence.map((ev, i) => (
-                      <motion.span
-                        key={i}
-                        whileHover={{ scale: 1.05 }}
-                        className="px-3 py-1 bg-black/30 border border-red-500/20 text-red-300 text-sm rounded-full"
-                      >
-                        {ev}
-                      </motion.span>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-
-        {/* Recommendations Tab */}
-        {activeTab === "recommendations" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-4 mb-16"
-          >
-            {result.recommendations.map((rec, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="flex gap-4 p-6 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur"
-              >
+          {/* Deception Findings */}
+          <div className="space-y-4">
+            <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-red-200 font-mono">FACIAL ANALYSIS</h4>
+                <span className="text-3xl font-black text-red-400">{result.modality_breakdown.video.toFixed(1)}%</span>
+              </div>
+              <p className="text-sm text-red-300 mb-2">Microexpression Detection</p>
+              <div className="w-full bg-red-900 rounded-full h-2 border border-red-700 overflow-hidden">
                 <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-400 flex items-center justify-center text-white font-bold"
-                >
-                  {index + 1}
-                </motion.div>
-                <p className="text-gray-300 flex-1">{rec}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${result.modality_breakdown.video}%` }}
+                  className="h-full bg-red-600 rounded-full"
+                />
+              </div>
+              <p className="text-xs text-red-400 mt-2">Emotion Detected: {result.video_analysis?.dominant_emotion || "NEUTRAL"}</p>
+            </div>
 
-        {/* Timeline Tab */}
-        {activeTab === "timeline" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="mb-16"
-          >
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-8 backdrop-blur">
-              <h3 className="text-xl font-bold text-white mb-6">Analysis Timeline</h3>
-              <div className="space-y-6">
-                {[
-                  { time: "14:32", event: "Analysis Initiated", status: "completed" },
-                  { time: "14:45", event: "Evidence Scanning", status: "completed" },
-                  { time: "15:12", event: "Pattern Recognition", status: "completed" },
-                  { time: "15:38", event: "Report Generation", status: "completed" },
-                  { time: "15:42", event: "Analysis Complete", status: "completed" },
-                ].map((item, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.5, delay: i * 0.1 }}
-                    className="flex gap-4"
+            <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-red-200 font-mono">VOCAL ANALYSIS</h4>
+                <span className="text-3xl font-black text-orange-400">{result.modality_breakdown.audio.toFixed(1)}%</span>
+              </div>
+              <p className="text-sm text-red-300 mb-2">Stress Indicators</p>
+              <div className="w-full bg-red-900 rounded-full h-2 border border-red-700 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${result.modality_breakdown.audio}%` }}
+                  className="h-full bg-orange-500 rounded-full"
+                />
+              </div>
+              <p className="text-xs text-red-400 mt-2">Stress Level: {result.audio_analysis?.stress_level || 0}%</p>
+            </div>
+
+            <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-red-200 font-mono">LINGUISTIC ANALYSIS</h4>
+                <span className="text-3xl font-black text-yellow-400">{result.modality_breakdown.text.toFixed(1)}%</span>
+              </div>
+              <p className="text-sm text-red-300 mb-2">Narrative Inconsistency</p>
+              <div className="w-full bg-red-900 rounded-full h-2 border border-red-700 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${result.modality_breakdown.text}%` }}
+                  className="h-full bg-yellow-500 rounded-full"
+                />
+              </div>
+              <p className="text-xs text-red-400 mt-2">Pattern Analysis: ACTIVE</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Critical Indicators */}
+        {result.detected_indicators && result.detected_indicators.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+            <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 backdrop-blur">
+              <h3 className="text-lg font-bold text-red-200 mb-4 font-mono">🚨 CRITICAL DECEPTION INDICATORS</h3>
+              <div className="flex flex-wrap gap-2">
+                {result.detected_indicators.map((indicator, idx) => (
+                  <motion.span
+                    key={idx}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className="px-4 py-2 bg-red-700 text-red-100 rounded-lg text-sm font-bold border border-red-500 animate-pulse"
                   >
-                    <div className="relative">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-red-600 to-red-400 flex items-center justify-center text-white font-bold">
-                        ✓
-                      </div>
-                      {i < 4 && <div className="absolute top-12 left-1/2 transform -translate-x-1/2 w-1 h-8 bg-red-600/50" />}
-                    </div>
-                    <div className="flex-1 pt-2">
-                      <p className="text-red-400 font-semibold">{item.time}</p>
-                      <p className="text-gray-300">{item.event}</p>
-                    </div>
-                  </motion.div>
+                    {indicator}
+                  </motion.span>
                 ))}
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Export Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="flex gap-4 justify-center"
-        >
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-8 py-3 bg-gradient-to-r from-red-600 to-red-500 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-red-500/50 transition"
-          >
-            📥 Export Report
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-8 py-3 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg font-semibold hover:bg-red-500/30 transition"
-          >
-            📧 Share Analysis
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate("/modes")}
-            className="px-8 py-3 bg-gray-800/50 border border-gray-700 text-gray-300 rounded-lg font-semibold hover:bg-gray-800 transition"
-          >
-            ↻ New Analysis
-          </motion.button>
+        {/* Analysis Report */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="bg-red-900/30 border border-red-700 rounded-xl p-8 backdrop-blur">
+            <h3 className="text-lg font-bold text-red-200 mb-4 font-mono">INVESTIGATOR REPORT</h3>
+            <div className="prose prose-invert max-w-none">
+              <p className="text-red-100 leading-relaxed">{result.explanation_summary}</p>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-red-700 flex gap-4">
+              <div className="flex-1">
+                <p className="text-xs text-red-400 font-mono mb-1">Risk Classification</p>
+                <p className={`text-lg font-bold ${riskLevel.color}`}>{riskLevel.label}</p>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-red-400 font-mono mb-1">Recommendation</p>
+                <p className="text-lg font-bold text-red-300">
+                  {result.overall_risk_score > 70 ? "FURTHER INVESTIGATION" : "MONITOR"}
+                </p>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-red-400 font-mono mb-1">Timeline</p>
+                <p className="text-lg font-bold text-red-300">{new Date().toLocaleDateString()}</p>
+              </div>
+            </div>
+          </div>
         </motion.div>
       </div>
     </div>

@@ -1,473 +1,329 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { motion } from "framer-motion"
-import { Icon } from "../components/UI/IconRenderer"
+import api from "../lib/api"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
-interface BusinessMetric {
-  name: string
-  current: number
-  benchmark: number
-  trend: "up" | "down" | "stable"
-  category: string
-}
-
-interface BusinessRecommendation {
-  priority: "Critical" | "High" | "Medium" | "Low"
-  title: string
-  description: string
-  impact: string
-  timeline: string
+interface AnalysisResult {
+  overall_risk_score: number
+  confidence_level: number
+  modality_breakdown: {
+    video: number
+    audio: number
+    text: number
+  }
+  detected_indicators: string[]
+  explanation_summary: string
+  audio_analysis?: {
+    transcript?: string
+    emotion?: string
+    stress_level?: number
+  }
+  video_analysis?: {
+    dominant_emotion?: string
+  }
 }
 
 export default function BusinessAnalysisResult() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<"metrics" | "recommendations" | "forecast">("metrics")
+  const { analysisId } = useParams()
+  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Mock data - would come from analysis backend
-  const metrics: BusinessMetric[] = [
-    { name: "Revenue Growth", current: 23.5, benchmark: 18, trend: "up", category: "Financial" },
-    { name: "Market Share", current: 15.2, benchmark: 12, trend: "up", category: "Market" },
-    { name: "Customer Satisfaction", current: 8.7, benchmark: 8, trend: "up", category: "Customer" },
-    { name: "Operational Efficiency", current: 82, benchmark: 75, trend: "up", category: "Operations" },
+  useEffect(() => {
+    const fetchAnalysisResults = async () => {
+      try {
+        if (!analysisId) {
+          setError("No analysis ID provided")
+          setLoading(false)
+          return
+        }
+
+        const response = await api.get(`/api/analyses/${analysisId}`)
+        const analysis = response.data.data
+
+        console.log("💼 Business Analysis Data:", analysis)
+
+        const result: AnalysisResult = {
+          overall_risk_score: analysis.overall_risk_score || 0,
+          confidence_level: analysis.confidence_level || 0,
+          modality_breakdown: analysis.modality_breakdown || {
+            video: 0,
+            audio: 0,
+            text: 0,
+          },
+          detected_indicators: analysis.detected_indicators || [],
+          explanation_summary: analysis.explanation_summary || "Analysis complete",
+          audio_analysis: analysis.results?.audio_analysis,
+          video_analysis: analysis.results?.video_analysis,
+        }
+
+        console.log("✅ Mapped Result:", result)
+        setResult(result)
+      } catch (err: any) {
+        console.error("❌ Error fetching analysis:", err)
+        setError(err.message || "Failed to load analysis results")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAnalysisResults()
+  }, [analysisId])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+          <p className="text-slate-300 mt-4">Loading business analysis...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">Error: {error}</p>
+          <button onClick={() => navigate(-1)} className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700">
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!result) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6 flex items-center justify-center">
+        <p className="text-slate-300">No results available</p>
+      </div>
+    )
+  }
+
+  const chartData = [
+    { label: "Face", value: result.modality_breakdown.video },
+    { label: "Voice", value: result.modality_breakdown.audio },
+    { label: "Text", value: result.modality_breakdown.text },
   ]
 
-  const recommendations: BusinessRecommendation[] = [
-    {
-      priority: "Critical",
-      title: "Expand Market Presence",
-      description: "Analyze expansion opportunities in emerging markets with growth potential above 20% annually",
-      impact: "Potential revenue increase of 35-40%",
-      timeline: "Q2-Q3 2024",
-    },
-    {
-      priority: "High",
-      title: "Digital Transformation Initiative",
-      description: "Implement AI-driven analytics and automation to improve decision-making processes",
-      impact: "20% reduction in operational costs",
-      timeline: "Q1-Q4 2024",
-    },
-    {
-      priority: "High",
-      title: "Customer Retention Program",
-      description: "Develop loyalty program targeting high-value customer segments",
-      impact: "15% improvement in customer retention",
-      timeline: "Q2 2024",
-    },
-    {
-      priority: "Medium",
-      title: "Supply Chain Optimization",
-      description: "Restructure supply chain for cost efficiency and sustainability",
-      impact: "12-15% cost reduction per unit",
-      timeline: "Q3-Q4 2024",
-    },
-  ]
-
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case "up":
-        return <Icon emoji="📈" size="md" inline={true} />
-      case "down":
-        return <Icon emoji="📉" size="md" inline={true} />
-      case "stable":
-        return <Icon emoji="➡️" size="md" inline={true} />
-      default:
-        return <Icon emoji="➡️" size="md" inline={true} />
-    }
+  const professionalismScore = 100 - result.overall_risk_score
+  const getProfessionalismGrade = (score: number) => {
+    if (score >= 90) return { grade: "A", color: "text-emerald-400", bg: "bg-emerald-900/20" }
+    if (score >= 80) return { grade: "B", color: "text-blue-400", bg: "bg-blue-900/20" }
+    if (score >= 70) return { grade: "C", color: "text-yellow-400", bg: "bg-yellow-900/20" }
+    if (score >= 60) return { grade: "D", color: "text-orange-400", bg: "bg-orange-900/20" }
+    return { grade: "F", color: "text-red-400", bg: "bg-red-900/20" }
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "Critical":
-        return "from-red-600 to-red-800"
-      case "High":
-        return "from-orange-600 to-orange-700"
-      case "Medium":
-        return "from-yellow-600 to-amber-700"
-      case "Low":
-        return "from-green-600 to-emerald-700"
-      default:
-        return "from-gray-600 to-gray-800"
-    }
-  }
-
-  const getPriorityBadgeColor = (priority: string) => {
-    switch (priority) {
-      case "Critical":
-        return "bg-red-500/20 border-red-500/50 text-red-300"
-      case "High":
-        return "bg-orange-500/20 border-orange-500/50 text-orange-300"
-      case "Medium":
-        return "bg-yellow-500/20 border-yellow-500/50 text-yellow-300"
-      case "Low":
-        return "bg-green-500/20 border-green-500/50 text-green-300"
-      default:
-        return "bg-gray-500/20 border-gray-500/50 text-gray-300"
-    }
-  }
+  const grade = getProfessionalismGrade(professionalismScore)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0B1415] via-[#0f2420] to-[#0B1415] relative overflow-hidden">
-      {/* Professional Business Background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 5, repeat: Infinity }}
-          className="absolute top-1/3 -left-32 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl"
-        />
-        <motion.div
-          animate={{ scale: [1.1, 1, 1.1] }}
-          transition={{ duration: 6, repeat: Infinity }}
-          className="absolute bottom-1/3 -right-32 w-64 h-64 bg-teal-600/10 rounded-full blur-3xl"
-        />
-        {/* Grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.03)_1px,transparent_1px)] bg-[size:50px_50px]" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900 to-slate-900">
+      {/* Ambient glow */}
+      <div className="fixed inset-0 pointer-events-none opacity-20">
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-teal-500 rounded-full blur-3xl"></div>
       </div>
 
-      <div className="relative z-10 max-w-6xl mx-auto px-6 py-20">
-        {/* Result Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9 }}
-          className="mb-16"
-        >
-          <div className="flex items-center justify-between mb-8">
+      <div className="relative z-10 max-w-7xl mx-auto p-6">
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+          <div className="flex justify-between items-center">
             <div>
-              <p className="text-emerald-400 text-lg font-semibold mb-2"><Icon emoji="💼" inline={true} />BUSINESS ANALYSIS RESULTS</p>
-              <h1 className="text-5xl font-bold text-white">Strategic Business Intelligence</h1>
+              <p className="text-teal-400 font-semibold text-sm mb-2">💼 BUSINESS MEETING ANALYSIS</p>
+              <h1 className="text-4xl font-bold text-slate-100">Professional Assessment Report</h1>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+            <button
               onClick={() => navigate("/modes")}
-              className="px-6 py-2 bg-emerald-600/20 border border-emerald-500/50 text-emerald-300 rounded-lg hover:bg-emerald-600/30 transition"
+              className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
             >
               New Analysis
-            </motion.button>
+            </button>
           </div>
         </motion.div>
 
-        {/* KPI Overview Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12"
-        >
-          {metrics.map((metric, index) => (
-            <motion.div
-              key={index}
-              whileHover={{ scale: 1.05, y: -5 }}
-              className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6 backdrop-blur overflow-hidden relative group"
-            >
-              <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-emerald-500 to-transparent opacity-0 group-hover:opacity-100 transition" />
+        {/* Executive Summary */}
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {/* Professionalism Grade */}
+          <div className={`${grade.bg} border-2 border-teal-500 rounded-xl p-6 backdrop-blur`}>
+            <p className="text-slate-400 text-xs font-semibold mb-2">PROFESSIONALISM</p>
+            <p className={`text-5xl font-black ${grade.color} mb-2`}>{grade.grade}</p>
+            <p className="text-sm text-slate-300">{professionalismScore.toFixed(0)}/100</p>
+          </div>
 
-              <p className="text-emerald-400 text-sm font-semibold mb-3">{metric.category}</p>
-              <h3 className="text-lg font-bold text-white mb-4">{metric.name}</h3>
+          {/* Risk Score */}
+          <div className="bg-slate-700/30 border-2 border-slate-600 rounded-xl p-6 backdrop-blur">
+            <p className="text-slate-400 text-xs font-semibold mb-2">DECEPTION RISK</p>
+            <p className="text-5xl font-bold text-amber-400">{result.overall_risk_score.toFixed(0)}</p>
+            <p className="text-sm text-slate-300">Out of 100</p>
+          </div>
 
-              <div className="flex items-baseline gap-3 mb-4">
-                <span className="text-3xl font-bold text-emerald-300">{metric.current}</span>
-                <span className="text-2xl">{getTrendIcon(metric.trend)}</span>
-              </div>
+          {/* Confidence */}
+          <div className="bg-teal-900/30 border-2 border-teal-600 rounded-xl p-6 backdrop-blur">
+            <p className="text-slate-400 text-xs font-semibold mb-2">ANALYSIS CONFIDENCE</p>
+            <p className="text-5xl font-bold text-teal-300">{result.confidence_level.toFixed(0)}%</p>
+            <p className="text-sm text-slate-300">Reliability: HIGH</p>
+          </div>
 
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-400">vs Benchmark</span>
-                <span className={`font-semibold ${metric.current > metric.benchmark ? "text-emerald-400" : "text-red-400"}`}>
-                  {metric.current > metric.benchmark ? "+" : ""}{(metric.current - metric.benchmark).toFixed(1)}
-                </span>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-emerald-500/20">
-                <div className="flex gap-2 text-xs float-right">
-                  <span className="px-2 py-1 bg-emerald-500/20 text-emerald-300 rounded">vs {metric.benchmark}</span>
-                </div>
-              </div>
-            </motion.div>
-          ))}
+          {/* Stress Level */}
+          <div className="bg-slate-700/30 border-2 border-slate-600 rounded-xl p-6 backdrop-blur">
+            <p className="text-slate-400 text-xs font-semibold mb-2">STRESS INDICATORS</p>
+            <p className="text-5xl font-bold text-orange-400">{result.audio_analysis?.stress_level || 0}%</p>
+            <p className="text-sm text-slate-300">Vocal Tension</p>
+          </div>
         </motion.div>
 
-        {/* Tabs */}
-        <div className="mb-8 border-b border-emerald-500/20">
-          <div className="flex gap-8">
-            {["metrics", "recommendations", "forecast"].map((tab) => (
-              <motion.button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`pb-4 font-semibold text-lg transition-colors relative ${
-                  activeTab === tab ? "text-emerald-400" : "text-gray-400 hover:text-gray-300"
-                }`}
-              >
-                <>
-                  {tab === "metrics" && <><Icon emoji="📊" inline={true} />Key Metrics</>}
-                  {tab === "recommendations" && <><Icon emoji="🎯" inline={true} />Recommendations</>}
-                  {tab === "forecast" && <><Icon emoji="🔮" inline={true} />Forecast</>}
-                  {activeTab === tab && (
-                    <motion.div
-                      layoutId="underline"
-                      className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-600 to-teal-400"
-                    />
-                  )}
-                </>
-              </motion.button>
-            ))}
+        {/* Modality Analysis */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Line Chart */}
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 backdrop-blur">
+            <h3 className="text-lg font-bold text-slate-100 mb-4">Behavioral Pattern Analysis</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+                <XAxis dataKey="label" stroke="#a0aec0" />
+                <YAxis stroke="#a0aec0" domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1a202c",
+                    border: "1px solid #0d9488",
+                    borderRadius: "8px",
+                  }}
+                  formatter={(value: any) => `${Number(value).toFixed(1)}%`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#14b8a6"
+                  strokeWidth={3}
+                  dot={{ fill: "#14b8a6", r: 6 }}
+                  activeDot={{ r: 8 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
-        </div>
 
-        {/* Metrics Tab */}
-        {activeTab === "metrics" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-8 mb-16"
-          >
-            {[
-              {
-                title: "Revenue Performance",
-                metrics: [
-                  { label: "YoY Growth", value: "23.5%", status: "excellent" },
-                  { label: "Quarterly Average", value: "$4.2M", status: "excellent" },
-                  { label: "Projection", value: "$5.1M", status: "excellent" },
-                ],
-              },
-              {
-                title: "Market Position",
-                metrics: [
-                  { label: "Market Share", value: "15.2%", status: "good" },
-                  { label: "Competitor Gap", value: "+3.2%", status: "excellent" },
-                  { label: "Growth Trajectory", value: "Accelerating", status: "excellent" },
-                ],
-              },
-              {
-                title: "Operational Metrics",
-                metrics: [
-                  { label: "Efficiency Rate", value: "82%", status: "excellent" },
-                  { label: "Cost per Unit", value: "-12%", status: "excellent" },
-                  { label: "Delivery Time", value: "-18%", status: "excellent" },
-                ],
-              },
-            ].map((section, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-8 backdrop-blur"
-              >
-                <h3 className="text-2xl font-bold text-white mb-6">{section.title}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {section.metrics.map((metric, j) => (
-                    <motion.div
-                      key={j}
-                      whileHover={{ scale: 1.05 }}
-                      className="bg-black/40 border border-emerald-500/20 rounded-lg p-4"
-                    >
-                      <p className="text-gray-400 text-sm mb-2">{metric.label}</p>
-                      <p className="text-2xl font-bold text-emerald-300">{metric.value}</p>
-                      {metric.status === "excellent" && (
-                        <div className="mt-2 flex gap-1">
-                          {[1, 2, 3].map((i) => (
-                            <motion.div
-                              key={i}
-                              animate={{ scale: [1, 1.2, 1] }}
-                              transition={{ duration: 1, delay: i * 0.1, repeat: Infinity }}
-                              className="w-2 h-2 rounded-full bg-emerald-500"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-
-        {/* Recommendations Tab */}
-        {activeTab === "recommendations" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-6 mb-16"
-          >
-            {recommendations.map((rec, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className={`rounded-xl border border-emerald-500/30 bg-gradient-to-br ${getPriorityColor(
-                  rec.priority
-                )} bg-opacity-5 p-8 backdrop-blur hover:border-emerald-500/50 transition`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex gap-3 items-flex-start mb-3">
-                      <span
-                        className={`px-3 py-1 bg-black/40 rounded-full text-xs font-semibold border ${getPriorityBadgeColor(
-                          rec.priority
-                        )}`}
-                      >
-                        {rec.priority} Priority
-                      </span>
-                      <span className="text-emerald-400 text-xs font-semibold"><Icon emoji="⏱️" inline={true} /> {rec.timeline}</span>
-                    </div>
-                    <h3 className="text-2xl font-bold text-white mb-2">{rec.title}</h3>
-                    <p className="text-gray-300 mb-4">{rec.description}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6 pt-6 border-t border-emerald-500/20">
-                  <div>
-                    <p className="text-emerald-400 font-semibold text-sm mb-2">Expected Impact</p>
-                    <p className="text-white font-bold text-lg">{rec.impact}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-emerald-400 font-semibold text-sm mb-2">Implementation</p>
-                    <p className="text-white font-bold text-lg">{rec.timeline}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-
-        {/* Forecast Tab */}
-        {activeTab === "forecast" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-8 mb-16"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Revenue Forecast */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0 }}
-                className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-8 backdrop-blur"
-              >
-                <h3 className="text-xl font-bold text-white mb-6">Revenue Forecast (12 months)</h3>
-                <div className="space-y-4">
-                  {["Q1", "Q2", "Q3", "Q4"].map((quarter, i) => (
-                    <div key={i}>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-gray-300">{quarter} 2024</span>
-                        <span className="text-emerald-300 font-bold">${4.2 + i * 0.3}M</span>
-                      </div>
-                      <div className="w-full bg-black/40 rounded-full h-3 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${(80 + i * 10)}%` }}
-                          transition={{ duration: 1.5, delay: i * 0.1 }}
-                          className="h-full bg-gradient-to-r from-emerald-600 to-teal-600"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* Market Share Forecast */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 }}
-                className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-8 backdrop-blur"
-              >
-                <h3 className="text-xl font-bold text-white mb-6">Market Share Growth</h3>
-                <div className="space-y-4">
-                  {[
-                    { label: "Current", value: "15.2%" },
-                    { label: "Q2 Target", value: "16.1%" },
-                    { label: "Q4 Target", value: "17.5%" },
-                    { label: "EOY Goal", value: "19.2%" },
-                  ].map((item, i) => (
-                    <div key={i}>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-gray-300">{item.label}</span>
-                        <span className="text-teal-300 font-bold">{item.value}</span>
-                      </div>
-                      <div className="w-full bg-black/40 rounded-full h-3 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: item.value }}
-                          transition={{ duration: 1.5, delay: i * 0.1 }}
-                          className="h-full bg-gradient-to-r from-teal-600 to-emerald-600"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
+          {/* Performance Metrics */}
+          <div className="space-y-4">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-slate-100">Visual Authenticity</h4>
+                <span className="text-2xl font-bold text-emerald-400">{result.modality_breakdown.video.toFixed(0)}%</span>
+              </div>
+              <p className="text-sm text-slate-400 mb-2">Facial Expression Consistency</p>
+              <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${100 - result.modality_breakdown.video}%` }}
+                  className="h-full bg-emerald-500 rounded-full"
+                />
+              </div>
             </div>
 
-            {/* Risk Assessment */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-8 backdrop-blur"
-            >
-              <h3 className="text-xl font-bold text-white mb-6">Risk Factors to Monitor</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {[
-                  "Market volatility in key regions",
-                  "Supply chain disruptions",
-                  "Increased competitive pressure",
-                  "Regulatory changes",
-                ].map((risk, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    className="flex gap-3 p-4 bg-black/40 rounded-lg border border-yellow-500/20"
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-slate-100">Vocal Authenticity</h4>
+                <span className="text-2xl font-bold text-blue-400">{result.modality_breakdown.audio.toFixed(0)}%</span>
+              </div>
+              <p className="text-sm text-slate-400 mb-2">Speech Pattern Stability</p>
+              <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${100 - result.modality_breakdown.audio}%` }}
+                  className="h-full bg-blue-500 rounded-full"
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-slate-100">Message Authenticity</h4>
+                <span className="text-2xl font-bold text-violet-400">{result.modality_breakdown.text.toFixed(0)}%</span>
+              </div>
+              <p className="text-sm text-slate-400 mb-2">Narrative Consistency</p>
+              <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${100 - result.modality_breakdown.text}%` }}
+                  className="h-full bg-violet-500 rounded-full"
+                />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Detected Patterns */}
+        {result.detected_indicators && result.detected_indicators.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 backdrop-blur">
+              <h3 className="text-lg font-bold text-slate-100 mb-4">Observed Behavioral Patterns</h3>
+              <div className="flex flex-wrap gap-2">
+                {result.detected_indicators.map((indicator, idx) => (
+                  <motion.span
+                    key={idx}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="px-4 py-2 bg-teal-900/40 text-teal-200 rounded-lg text-sm font-medium border border-teal-700/50 hover:bg-teal-900/60 transition"
                   >
-                    <Icon emoji="⚠️" inline={true} className="text-yellow-400" />
-                    <span className="text-gray-300">{risk}</span>
-                  </motion.div>
+                    • {indicator}
+                  </motion.span>
                 ))}
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         )}
 
-        {/* Export Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="flex gap-4 justify-center"
-        >
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-emerald-500/50 transition"
-          >
-            📥 Export Report
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-8 py-3 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 rounded-lg font-semibold hover:bg-emerald-500/30 transition"
-          >
-            <>
-              <Icon emoji="📊" inline={true} />
-              <span>Share Dashboard</span>
-            </>
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate("/modes")}
-            className="px-8 py-3 bg-gray-800/50 border border-gray-700 text-gray-300 rounded-lg font-semibold hover:bg-gray-800 transition"
-          >
-            ↻ New Analysis
-          </motion.button>
+        {/* Executive Recommendations */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-8 backdrop-blur">
+            <h3 className="text-lg font-bold text-slate-100 mb-4">Executive Summary & Recommendations</h3>
+
+            <div className="mb-6 pb-6 border-b border-slate-700">
+              <p className="text-slate-200 leading-relaxed mb-4">{result.explanation_summary}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <h4 className="text-teal-400 font-semibold text-sm mb-2">Assessment Status</h4>
+                <div className="space-y-2">
+                  <p className="text-slate-300">
+                    Grade: <span className={`font-bold ${grade.color}`}>{grade.grade}</span>
+                  </p>
+                  <p className="text-slate-300">
+                    Risk Level:{" "}
+                    <span className="font-bold text-amber-400">
+                      {result.overall_risk_score > 70 ? "HIGH" : result.overall_risk_score > 40 ? "MEDIUM" : "LOW"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-teal-400 font-semibold text-sm mb-2">Key Metrics</h4>
+                <div className="space-y-2">
+                  <p className="text-slate-300">
+                    Professionalism: <span className="font-bold">{professionalismScore.toFixed(0)}%</span>
+                  </p>
+                  <p className="text-slate-300">
+                    Confidence: <span className="font-bold">{result.confidence_level.toFixed(0)}%</span>
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-teal-400 font-semibold text-sm mb-2">Next Steps</h4>
+                <p className="text-slate-300 text-sm">
+                  {result.overall_risk_score > 70
+                    ? "Conduct detailed follow-up interview"
+                    : "Proceed with standard protocols"}
+                </p>
+              </div>
+            </div>
+          </div>
         </motion.div>
       </div>
     </div>

@@ -24,13 +24,35 @@ const updateAnalysisStatus = async (
     analysisId: string,
     oldStatus: AnalysisStatus,
     newStatus: AnalysisStatus,
-    results: any = null
+    results: any = null,
+    riskScore?: number,
+    confidenceLevel?: number
 ) => {
     await db.transaction(async (tx) => {
-        // Update analysis record
+        // Update analysis record with results and scalar fields
+        const updateData: any = { status: newStatus };
+        
+        if (results) {
+            updateData.results = results;
+            // Also store scalar fields from results for easier querying
+            if (typeof results.overall_risk_score === 'number') {
+                updateData.overallRiskScore = Math.round(results.overall_risk_score);
+            }
+            if (typeof results.confidence_level === 'number') {
+                updateData.confidenceLevel = (results.confidence_level / 100).toString(); // Convert to 0-1 decimal
+            }
+        }
+
+        if (typeof riskScore === 'number') {
+            updateData.overallRiskScore = Math.round(riskScore);
+        }
+        if (typeof confidenceLevel === 'number') {
+            updateData.confidenceLevel = (confidenceLevel / 100).toString();
+        }
+
         await tx
             .update(analyses)
-            .set({ status: newStatus, results })
+            .set(updateData)
             .where(eq(analyses.id, analysisId));
 
         // Insert into history for timeline tracking
@@ -41,8 +63,8 @@ const updateAnalysisStatus = async (
         });
 
         logger.info(
-            { analysisId, oldStatus, newStatus },
-            `Analysis status updated: ${oldStatus} -> ${newStatus}`
+            { analysisId, oldStatus, newStatus, riskScore: updateData.overallRiskScore },
+            `✅ Analysis status updated: ${oldStatus} → ${newStatus}`
         );
     });
 };
@@ -82,17 +104,20 @@ export const analysisWorker = new Worker<AnalysisJobPayload>(
 
             // Stage 3: Call AI microservice
             // Use uploaded files or fileUrl
-            const inputSource = filePaths ? filePaths : fileUrl;
-            if (!inputSource) {
+            const hasFiles = filePaths && filePaths.length > 0;
+            const hasUrl = !!fileUrl;
+
+            if (!hasFiles && !hasUrl) {
                 throw new Error('No file input provided for analysis');
             }
 
             logger.info(
-                { analysisId, inputType: filePaths ? 'uploaded_files' : 'url', inputSource },
-                'Calling AI service'
+                { analysisId, fileCount: filePaths?.length || 0, hasUrl },
+                '📤 Sending to AI service for analysis'
             );
 
-            const aiResult = await AIService.analyze(userId, modes, fileUrl || filePaths?.[0]);
+            // Pass file paths or URL to AI service
+            const aiResult = await AIService.analyze(userId, modes, hasFiles ? filePaths : undefined, fileUrl);
 
             // Stage 4: Mark as AI_ANALYZED
             await updateAnalysisStatus(analysisId, 'PROCESSING', 'AI_ANALYZED', aiResult);
@@ -152,12 +177,6 @@ export const analysisWorker = new Worker<AnalysisJobPayload>(
         concurrency: process.env.WORKER_CONCURRENCY
             ? parseInt(process.env.WORKER_CONCURRENCY, 10)
             : 5,
-        // Retry configuration
-        attempts: 3,
-        backoff: {
-            type: 'exponential',
-            delay: 2000,
-        },
     }
 );
 

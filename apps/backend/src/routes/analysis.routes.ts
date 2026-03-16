@@ -27,6 +27,9 @@ router.post(
   AnalysisController.createAnalysisWithUpload
 );
 
+// Get full analysis result by ID
+router.get('/:analysisId', requireAuth, AnalysisController.getAnalysis);
+
 // Get analysis status timeline
 router.get('/:analysisId/status-history', requireAuth, AnalysisController.getAnalysisStatusHistory);
 

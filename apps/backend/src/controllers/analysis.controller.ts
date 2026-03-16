@@ -279,6 +279,69 @@ export class AnalysisController {
   }
 
   /**
+   * Get full analysis result by ID
+   */
+  static async getAnalysis(req: Request, res: Response) {
+    try {
+      const { analysisId } = req.params;
+      const userId = req.user?.id;
+
+      // Verify analysis exists
+      const [analysis] = await db
+        .select()
+        .from(analyses)
+        .where(eq(analyses.id, analysisId));
+
+      if (!analysis) {
+        throw new AppError('Analysis not found', 404, 'ANALYSIS_NOT_FOUND');
+      }
+
+      // Verify user has access to this analysis
+      if (analysis.userId !== userId) {
+        throw new AppError('Access denied', 403, 'FORBIDDEN');
+      }
+
+      // Get associated files
+      const analysisFiles = await db
+        .select()
+        .from(files)
+        .where(eq(files.analysisId, analysisId));
+
+      // Extract results data with proper structure
+      const resultData = analysis.results as any || {};
+      
+      // Build response with all relevant fields
+      const responseData = {
+        id: analysis.id,
+        userId: analysis.userId,
+        status: analysis.status,
+        modes: analysis.modes,
+        overallRiskScore: analysis.overallRiskScore ? parseFloat(String(analysis.overallRiskScore)) : resultData.overall_risk_score,
+        confidenceLevel: analysis.confidenceLevel ? parseFloat(String(analysis.confidenceLevel)) : resultData.confidence_level,
+        results: resultData,
+        files: analysisFiles,
+        createdAt: analysis.createdAt,
+        updatedAt: analysis.updatedAt,
+        // Flatten important fields for easier frontend access
+        explanation: resultData.explanation_summary,
+        indicators: resultData.detected_indicators,
+        modalityBreakdown: resultData.modality_breakdown,
+        modelDetails: resultData.model_details,
+      };
+
+      logger.info({ analysisId, status: analysis.status }, '✅ Analysis retrieved successfully');
+
+      return res.status(200).json({
+        success: true,
+        data: responseData,
+      });
+    } catch (error: any) {
+      logger.error({ err: error }, 'Failed to fetch analysis');
+      throw error;
+    }
+  }
+
+  /**
    * Get analysis status history timeline
    */
   static async getAnalysisStatusHistory(req: Request, res: Response) {

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { userAPI } from "../../lib/api"
 
@@ -13,7 +12,6 @@ interface User {
 }
 
 export default function AdminUsers() {
-    const navigate = useNavigate()
     const [searchTerm, setSearchTerm] = useState("")
     const [filterRole, setFilterRole] = useState<"ALL" | "ADMIN" | "USER">("ALL")
     const [filterStatus, setFilterStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL")

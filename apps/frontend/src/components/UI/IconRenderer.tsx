@@ -26,10 +26,9 @@ export const Icon: React.FC<IconProps> = ({
 
 // Utility component for rendering emoji text with icon
 export const withIcon = (emoji: string, text: string) => {
-  const IconComponent = getIconComponent(emoji)
   return (
     <>
-      <IconComponent className="w-5 h-5 inline mr-2" />
+      <Icon emoji={emoji} size="sm" className="inline mr-2" />
       {text}
     </>
   )

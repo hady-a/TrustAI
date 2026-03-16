@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 
 const MOCK_LOGS = [
@@ -31,7 +30,6 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function AdminLogs() {
-    const navigate = useNavigate()
     const [filterAction, setFilterAction] = useState("")
     const [filterStatus, setFilterStatus] = useState("")
     const [searchTerm, setSearchTerm] = useState("")
