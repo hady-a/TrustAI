@@ -40,7 +40,7 @@ export default function CriminalAnalysisResult() {
           return
         }
 
-        const response = await api.get(`/api/analyses/${analysisId}`)
+        const response = await api.get(`/analyses/${analysisId}`)
         const analysis = response.data.data
 
         console.log("🔍 Criminal Analysis Data:", analysis)

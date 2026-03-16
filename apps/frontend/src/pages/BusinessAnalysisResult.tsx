@@ -40,7 +40,7 @@ export default function BusinessAnalysisResult() {
           return
         }
 
-        const response = await api.get(`/api/analyses/${analysisId}`)
+        const response = await api.get(`/analyses/${analysisId}`)
         const analysis = response.data.data
 
         console.log("💼 Business Analysis Data:", analysis)

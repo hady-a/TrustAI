@@ -12,6 +12,7 @@ export default function BusinessAnalysis() {
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string>("");
+  const [analysisId, setAnalysisId] = useState<string>("");
 
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
@@ -35,7 +36,9 @@ export default function BusinessAnalysis() {
 
     try {
       const fileUrl = URL.createObjectURL(selectedFile);
-      await analysisAPI.create({ fileUrl, modes: ["BUSINESS"] });
+      const response = await analysisAPI.create({ fileUrl, modes: ["BUSINESS"] });
+      const newAnalysisId = response.data.data.id;
+      setAnalysisId(newAnalysisId);
 
       setProgress(100);
       clearInterval(interval);
@@ -261,7 +264,7 @@ export default function BusinessAnalysis() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/analysis/business/result")}
+              onClick={() => navigate(`/analysis/business/result/${analysisId}`)}
               className="px-12 py-4 bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-emerald-600/50 transition-all shadow-lg"
             >
               📊 VIEW DASHBOARD

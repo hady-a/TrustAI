@@ -13,6 +13,7 @@ export default function CriminalAnalysis() {
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string>("");
+  const [analysisId, setAnalysisId] = useState<string>("");
 
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
@@ -36,7 +37,9 @@ export default function CriminalAnalysis() {
 
     try {
       const fileUrl = URL.createObjectURL(selectedFile);
-      await analysisAPI.create({ fileUrl, modes: ["CRIMINAL"] });
+      const response = await analysisAPI.create({ fileUrl, modes: ["CRIMINAL"] });
+      const newAnalysisId = response.data.data.id;
+      setAnalysisId(newAnalysisId);
 
       setProgress(100);
       clearInterval(interval);
@@ -230,7 +233,7 @@ export default function CriminalAnalysis() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/analysis/criminal/result")}
+              onClick={() => navigate(`/analysis/criminal/result/${analysisId}`)}
               className="px-12 py-4 bg-gradient-to-r from-red-700 to-red-900 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-red-600/50 transition-all shadow-lg"
             >
               📊 VIEW RESULTS
