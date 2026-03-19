@@ -5,7 +5,6 @@ import {
   analysisStatusHistorySchema,
   getAnalysisFilesSchema,
 } from '../validators/analysis.validator';
-import { addAnalysisJob } from '../queues/analysis.queue';
 import { AuditService } from '../services/audit.service';
 import { FileService } from '../services/file.service';
 import { AnalysisLogService } from '../services/analysisLogging.service';
@@ -70,26 +69,6 @@ export class AnalysisController {
       .update(analyses)
       .set({ status: 'QUEUED' })
       .where(eq(analyses.id, newAnalysis.id));
-
-    // Push job to Redis queue
-    try {
-      await addAnalysisJob({
-        analysisId: newAnalysis.id,
-        userId,
-        fileUrl,
-        modes,
-      });
-      
-      await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis queued for processing', {
-        fileUrl,
-        modes,
-      });
-    } catch (error: any) {
-      await AnalysisLogService.error(newAnalysis.id, userId, 'Failed to queue analysis', {
-        error: error.message,
-      });
-      throw error;
-    }
 
     // Log the action
     await AuditService.log(userId, 'CREATE_ANALYSIS', {
@@ -228,28 +207,6 @@ export class AnalysisController {
         to: 'QUEUED',
         fileCount: uploadedFiles.length,
       });
-
-      // Push job to Redis queue with uploaded file paths
-      try {
-        await addAnalysisJob({
-          analysisId: newAnalysis.id,
-          userId,
-          modes,
-          fileIds: uploadedFiles.map((f) => f.id),
-          filePaths: uploadedFiles.map((f) => f.filePath),
-        });
-
-        await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis queued for processing', {
-          fileCount: uploadedFiles.length,
-          modes,
-        });
-      } catch (error: any) {
-        await AnalysisLogService.error(newAnalysis.id, userId, 'Failed to queue analysis', {
-          fileCount: uploadedFiles.length,
-          error: error.message,
-        });
-        throw error;
-      }
 
       // Log the action
       await AuditService.log(userId, 'CREATE_ANALYSIS', {

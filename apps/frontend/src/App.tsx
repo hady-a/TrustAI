@@ -18,11 +18,8 @@ import UserProfile from "./pages/UserProfile"
 import ModeSelection from "./pages/ModeSelection"
 import UploadAnalysis from "./pages/UploadAnalysis"
 import CriminalAnalysis from "./pages/CriminalAnalysis"
-import CriminalAnalysisResult from "./pages/CriminalAnalysisResult"
 import InterviewAnalysis from "./pages/InterviewAnalysis"
-import InterviewAnalysisResult from "./pages/InterviewAnalysisResult"
 import BusinessAnalysis from "./pages/BusinessAnalysis"
-import BusinessAnalysisResult from "./pages/BusinessAnalysisResult"
 import Help from "./pages/Help"
 import AdvancedFeaturesDemo from "./pages/AdvancedFeaturesDemo"
 import MainLayout from "./layouts/MainLayout"
@@ -63,11 +60,8 @@ function AppRoutes() {
         <Route path="/modes" element={<MainLayout><ModeSelection /></MainLayout>} />
         <Route path="/upload" element={<MainLayout><UploadAnalysis /></MainLayout>} />
         <Route path="/analysis/criminal" element={<MainLayout><CriminalAnalysis /></MainLayout>} />
-        <Route path="/analysis/criminal/result/:analysisId" element={<MainLayout><CriminalAnalysisResult /></MainLayout>} />
         <Route path="/analysis/interview" element={<MainLayout><InterviewAnalysis /></MainLayout>} />
-        <Route path="/analysis/interview/result/:analysisId" element={<MainLayout><InterviewAnalysisResult /></MainLayout>} />
         <Route path="/analysis/business" element={<MainLayout><BusinessAnalysis /></MainLayout>} />
-        <Route path="/analysis/business/result/:analysisId" element={<MainLayout><BusinessAnalysisResult /></MainLayout>} />
         <Route path="/help" element={<MainLayout><Help /></MainLayout>} />
         <Route path="/features" element={<MainLayout><AdvancedFeaturesDemo /></MainLayout>} />
 

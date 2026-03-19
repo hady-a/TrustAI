@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # TrustAI Complete Setup and Run Script
-# Integrates Backend, Frontend, and AI Service
+# Integrates Backend and Frontend
 
 set -e  # Exit on error
 
@@ -46,7 +46,6 @@ setup_docker() {
     echo "Services running at:"
     echo "  Frontend: http://localhost:5173"
     echo "  Backend:  http://localhost:5000"
-    echo "  AI Service: http://localhost:8000"
     echo ""
     echo "View logs:"
     echo "  docker-compose logs -f"
@@ -80,21 +79,13 @@ setup_local() {
     cd ../..
     echo ""
     
-    # AI Service
-    echo -e "${BLUE}Setting up AI Service...${NC}"
-    cd apps/ai-service
-    chmod +x setup.sh
-    ./setup.sh
-    echo -e "${GREEN}✅ AI Service ready${NC}"
-    cd ../..
-    echo ""
+
     
     echo -e "${GREEN}✅ All setup complete!${NC}"
     echo ""
     echo "To start services, run in separate terminals:"
     echo "  Backend: cd apps/backend && npm run dev"
     echo "  Frontend: cd apps/frontend && npm run dev"
-    echo "  AI Service: cd apps/ai-service && source venv/bin/activate && python -m uvicorn app.main:app --reload"
 }
 
 # Option 3: Run all locally
@@ -114,19 +105,10 @@ run_local() {
     echo "  cd apps/frontend && npm run dev"
     echo ""
     
-    # Start AI Service
-    echo "Terminal 3 - AI Service:"
-    echo "  cd apps/ai-service"
-    echo "  source venv/bin/activate"
-    echo "  python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-    echo ""
-    
     echo -e "${GREEN}Services will be available at:${NC}"
     echo "  Frontend: http://localhost:5173"
     echo "  Backend:  http://localhost:5000"
     echo "  API Docs: http://localhost:5000/api/docs"
-    echo "  AI Service: http://localhost:8000"
-    echo "  AI Service Docs: http://localhost:8000/docs"
 }
 
 # Main menu

@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # Start TrustAI Development Environment
-# Starts Backend, Frontend, and AI Service
+# Starts Backend and Frontend
 
 set -e
 
 TRUSTAI_ROOT="/Users/hadyakram/Desktop/trustai"
-AI_SERVICE_LOG="/tmp/ai-service.log"
 PIDS=()
 
 # Colors
@@ -30,30 +29,6 @@ echo ""
 echo "╔════════════════════════════════════════╗"
 echo "║  TrustAI Development Environment       ║"
 echo "╚════════════════════════════════════════╝"
-echo ""
-
-# Start AI Service
-echo -e "${BLUE}🤖 Starting AI Service on port 8000...${NC}"
-cd "$TRUSTAI_ROOT/apps/ai-service"
-nohup /Users/hadyakram/Desktop/trustai/apps/ai-service/venv/bin/python \
-  -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
-  > "$AI_SERVICE_LOG" 2>&1 &
-AI_PID=$!
-PIDS+=($AI_PID)
-echo -e "${GREEN}✅ AI Service started (PID: $AI_PID)${NC}"
-echo "   Logs: tail -f $AI_SERVICE_LOG"
-echo ""
-
-# Wait for AI Service to be ready
-echo "   Waiting for AI Service health check..."
-for i in {1..30}; do
-    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo -e "${GREEN}   ✅ AI Service healthy${NC}"
-        break
-    fi
-    echo -n "."
-    sleep 1
-done
 echo ""
 
 # Start Backend
@@ -90,16 +65,11 @@ echo ""
 echo "Services available at:"
 echo "  Frontend:  http://localhost:5173"
 echo "  Backend:   http://localhost:9999"
-echo "  AI Service: http://localhost:8000"
 echo ""
 echo "API Documentation:"
 echo "  Backend:   http://localhost:9999/api/docs"
-echo "  AI Service: http://localhost:8000/docs"
 echo ""
 echo "Service Status:"
-printf "  AI Service: "
-curl -s http://localhost:8000/health | grep -q healthy && echo "✅ Healthy" || echo "⏳ Loading"
-echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""
 

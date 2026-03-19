@@ -191,7 +191,6 @@ if [ "$1" = "--clean" ]; then
     print_info "Cleaning up log files..."
     rm -f "$PROJECT_ROOT/.backend.log"
     rm -f "$PROJECT_ROOT/.frontend.log"
-    rm -f "$PROJECT_ROOT/.ai-service.log"
     rm -f "$PROJECT_ROOT/.redis.log"
     print_success "Log files cleaned"
 fi
@@ -209,7 +208,6 @@ print_info "All TrustAI services have been stopped"
 echo -e "\n${BLUE}To view recent logs, check:${NC}"
 echo -e "   ${YELLOW}.backend.log${NC}"
 echo -e "   ${YELLOW}.frontend.log${NC}"
-echo -e "   ${YELLOW}.ai-service.log${NC}"
 echo -e "   ${YELLOW}.redis.log${NC}"
 
 echo -e "\n${BLUE}To start services again, run:${NC}"
