@@ -2,7 +2,7 @@
 Flask API for TrustAI - AI Model Integration
 Exposes Python AI analysis system via REST API endpoints
 """
-
+import sys
 import os
 import json
 import tempfile
@@ -11,7 +11,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-from main import AIAnalysisSystem
+from aimodel.main import AIAnalysisSystem
 
 # Initialize Flask app
 app = Flask(__name__)
