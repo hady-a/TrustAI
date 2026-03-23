@@ -28,6 +28,7 @@ import systemSettingsRoutes from './routes/systemSettings.routes';
 import { pool, checkDatabaseConnection, db } from './db';
 import { users } from './db/schema/users';
 import { eq } from 'drizzle-orm';
+import { initializeFlaskConnection, checkFlaskAPI } from './middleware/flaskAPIHealth.middleware';
 
 const app: Express = express();
 const PORT: string | number = process.env.PORT || 9999;
@@ -73,6 +74,9 @@ app.use(pinoHttp({ logger }));
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalLimiter);
+
+// Add Flask API health check to request
+app.use(checkFlaskAPI);
 
 // ============================================================================
 // HEALTH & DIAGNOSTIC ENDPOINTS
@@ -213,6 +217,11 @@ async function startServer() {
       console.error('   4. Migrations are applied: npm run db:push\n');
       process.exit(1);
     }
+
+    // Initialize Flask AI API connection
+    console.log('🤖 Initializing Flask AI API connection...');
+    await initializeFlaskConnection();
+    // Note: Flask API being unavailable is not a fatal error - we continue with graceful degradation
 
     // Start HTTP server
     const server = app.listen(PORT, () => {
