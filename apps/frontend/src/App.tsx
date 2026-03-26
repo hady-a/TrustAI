@@ -20,6 +20,7 @@ import UploadAnalysis from "./pages/UploadAnalysis"
 import CriminalAnalysis from "./pages/CriminalAnalysis"
 import InterviewAnalysis from "./pages/InterviewAnalysis"
 import BusinessAnalysis from "./pages/BusinessAnalysis"
+import ResultsPage from "./pages/ResultsPage"
 import Help from "./pages/Help"
 import AdvancedFeaturesDemo from "./pages/AdvancedFeaturesDemo"
 import MainLayout from "./layouts/MainLayout"
@@ -62,6 +63,12 @@ function AppRoutes() {
         <Route path="/analysis/criminal" element={<MainLayout><CriminalAnalysis /></MainLayout>} />
         <Route path="/analysis/interview" element={<MainLayout><InterviewAnalysis /></MainLayout>} />
         <Route path="/analysis/business" element={<MainLayout><BusinessAnalysis /></MainLayout>} />
+        
+        {/* Results Pages */}
+        <Route path="/analysis/business/result/:id" element={<MainLayout><ResultsPage mode="BUSINESS" /></MainLayout>} />
+        <Route path="/analysis/criminal/result/:id" element={<MainLayout><ResultsPage mode="CRIMINAL" /></MainLayout>} />
+        <Route path="/analysis/interview/result/:id" element={<MainLayout><ResultsPage mode="INTERVIEW" /></MainLayout>} />
+        
         <Route path="/help" element={<MainLayout><Help /></MainLayout>} />
         <Route path="/features" element={<MainLayout><AdvancedFeaturesDemo /></MainLayout>} />
 

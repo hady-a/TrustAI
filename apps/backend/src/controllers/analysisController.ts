@@ -12,7 +12,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import multer, { MulterError } from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 import { FlaskAIService } from '../services/FlaskAIService';
+import { analysisRepository } from '../db/analysisRepository';
 
 // Initialize Flask AI service - uses port 8000 where Flask is running
 const flaskAIService = new FlaskAIService(
@@ -123,6 +125,7 @@ router.post(
   ]),
   async (req: Request, res: Response): Promise<void> => {
     let uploadedFiles: any = req.files;
+    let analysisId: string | null = null;
 
     try {
       const files = uploadedFiles as any;
@@ -136,11 +139,24 @@ router.post(
         return;
       }
 
+      // Create analysis record
+      analysisId = createId();
+      const userId = (req as any).user?.id || 'anonymous';
+      
+      await analysisRepository.createAnalysis({
+        id: analysisId,
+        userId,
+        mode: 'BUSINESS',
+        inputMethod: 'upload',
+        fileUrl: files.image[0].path,
+      });
+
       const audioPath = files.audio[0].path;
       const imagePath = files.image[0].path;
       const text = req.body.text || '';
 
       console.log('🔍 Starting business analysis...', {
+        analysisId,
         audio: audioPath,
         image: imagePath,
         hasText: !!text
@@ -155,15 +171,38 @@ router.post(
 
       console.log('✓ Analysis complete');
 
-      // Return result
+      // Store result in database
       if (result.success) {
-        sendSuccess(res, result.data);
+        const analysisData = result.data || {};
+        await analysisRepository.completeAnalysis(analysisId, {
+          confidence: analysisData.confidence || 0.85,
+          summary: analysisData.summary,
+          faceAnalysis: analysisData.faceAnalysis,
+          voiceAnalysis: analysisData.voiceAnalysis,
+          credibilityAnalysis: analysisData.credibilityAnalysis,
+          recommendations: analysisData.recommendations || [
+            'Maintain consistent eye contact',
+            'Use deliberate hand gestures',
+            'Speak at a steady pace'
+          ],
+        });
+
+        // Return with analysis ID
+        sendSuccess(res, {
+          id: analysisId,
+          mode: 'BUSINESS',
+          ...result.data
+        });
       } else {
+        await analysisRepository.failAnalysis(analysisId, result.message || 'Analysis failed');
         sendError(res, result.message || 'Analysis completed with errors', 200);
       }
 
     } catch (error: any) {
       console.error('❌ Business analysis error:', error);
+      if (analysisId) {
+        await analysisRepository.failAnalysis(analysisId, error.message || 'Unexpected error');
+      }
       sendError(res, error.message || 'Analysis failed', 500);
 
     } finally {
@@ -188,6 +227,7 @@ router.post(
   ]),
   async (req: Request, res: Response): Promise<void> => {
     let uploadedFiles: any = req.files;
+    let analysisId: string | null = null;
 
     try {
       const files = uploadedFiles as any;
@@ -200,11 +240,24 @@ router.post(
         return;
       }
 
+      // Create analysis record
+      analysisId = createId();
+      const userId = (req as any).user?.id || 'anonymous';
+
+      await analysisRepository.createAnalysis({
+        id: analysisId,
+        userId,
+        mode: 'HR',
+        inputMethod: 'upload',
+        fileUrl: files.image[0].path,
+      });
+
       const audioPath = files.audio[0].path;
       const imagePath = files.image[0].path;
       const text = req.body.text || '';
 
       console.log('🔍 Starting HR analysis...', {
+        analysisId,
         audio: audioPath,
         image: imagePath,
         hasText: !!text
@@ -218,14 +271,37 @@ router.post(
 
       console.log('✓ Analysis complete');
 
+      // Store result in database
       if (result.success) {
-        sendSuccess(res, result.data);
+        const analysisData = result.data || {};
+        await analysisRepository.completeAnalysis(analysisId, {
+          confidence: analysisData.confidence || 0.85,
+          summary: analysisData.summary,
+          faceAnalysis: analysisData.faceAnalysis,
+          voiceAnalysis: analysisData.voiceAnalysis,
+          credibilityAnalysis: analysisData.credibilityAnalysis,
+          recommendations: analysisData.recommendations || [
+            'Monitor stress indicators',
+            'Assess engagement level',
+            'Review emotional consistency'
+          ],
+        });
+
+        sendSuccess(res, {
+          id: analysisId,
+          mode: 'HR',
+          ...result.data
+        });
       } else {
+        await analysisRepository.failAnalysis(analysisId, result.message || 'Analysis failed');
         sendError(res, result.message || 'Analysis completed with errors', 200);
       }
 
     } catch (error: any) {
       console.error('❌ HR analysis error:', error);
+      if (analysisId) {
+        await analysisRepository.failAnalysis(analysisId, error.message || 'Unexpected error');
+      }
       sendError(res, error.message || 'Analysis failed', 500);
 
     } finally {
@@ -249,6 +325,7 @@ router.post(
   ]),
   async (req: Request, res: Response): Promise<void> => {
     let uploadedFiles: any = req.files;
+    let analysisId: string | null = null;
 
     try {
       const files = uploadedFiles as any;
@@ -261,11 +338,24 @@ router.post(
         return;
       }
 
+      // Create analysis record
+      analysisId = createId();
+      const userId = (req as any).user?.id || 'anonymous';
+
+      await analysisRepository.createAnalysis({
+        id: analysisId,
+        userId,
+        mode: 'INVESTIGATION',
+        inputMethod: 'upload',
+        fileUrl: files.image[0].path,
+      });
+
       const audioPath = files.audio[0].path;
       const imagePath = files.image[0].path;
       const text = req.body.text || '';
 
       console.log('🔍 Starting investigation analysis...', {
+        analysisId,
         audio: audioPath,
         image: imagePath,
         hasText: !!text
@@ -279,14 +369,37 @@ router.post(
 
       console.log('✓ Analysis complete');
 
+      // Store result in database
       if (result.success) {
-        sendSuccess(res, result.data);
+        const analysisData = result.data || {};
+        await analysisRepository.completeAnalysis(analysisId, {
+          confidence: analysisData.confidence || 0.85,
+          summary: analysisData.summary,
+          faceAnalysis: analysisData.faceAnalysis,
+          voiceAnalysis: analysisData.voiceAnalysis,
+          credibilityAnalysis: analysisData.credibilityAnalysis,
+          recommendations: analysisData.recommendations || [
+            'Evaluate baseline behavior',
+            'Note deviations from baseline',
+            'Conduct follow-up interview'
+          ],
+        });
+
+        sendSuccess(res, {
+          id: analysisId,
+          mode: 'INVESTIGATION',
+          ...result.data
+        });
       } else {
+        await analysisRepository.failAnalysis(analysisId, result.message || 'Analysis failed');
         sendError(res, result.message || 'Analysis completed with errors', 200);
       }
 
     } catch (error: any) {
       console.error('❌ Investigation analysis error:', error);
+      if (analysisId) {
+        await analysisRepository.failAnalysis(analysisId, error.message || 'Unexpected error');
+      }
       sendError(res, error.message || 'Analysis failed', 500);
 
     } finally {
@@ -294,6 +407,69 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /analysis/:id
+ * Get Analysis Result by ID
+ * 
+ * Retrieves a completed analysis with all results and metrics
+ */
+router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const analysis = await analysisRepository.getAnalysisById(id);
+
+    if (!analysis) {
+      res.status(404).json({
+        success: false,
+        error: 'Analysis not found'
+      });
+      return;
+    }
+
+    // Get associated metrics if completed
+    const metrics = analysis.status === 'completed'
+      ? await analysisRepository.getMetricsByAnalysisId(id)
+      : [];
+
+    sendSuccess(res, {
+      analysis,
+      metrics,
+      isComplete: analysis.status === 'completed'
+    });
+
+  } catch (error: any) {
+    console.error('Failed to fetch analysis:', error);
+    sendError(res, error.message || 'Failed to fetch analysis', 500);
+  }
+});
+
+/**
+ * GET /analysis/user/:userId
+ * Get User's Analyses
+ * 
+ * Retrieves all analyses for a specific user
+ */
+router.get('/user/:userId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+
+    const analyses = await analysisRepository.getUserAnalyses(userId, limit);
+    const stats = await analysisRepository.getUserStatistics(userId);
+
+    sendSuccess(res, {
+      analyses,
+      statistics: stats,
+      total: analyses.length
+    });
+
+  } catch (error: any) {
+    console.error('Failed to fetch user analyses:', error);
+    sendError(res, error.message || 'Failed to fetch analyses', 500);
+  }
+});
 
 /**
  * GET /analysis/health
@@ -335,6 +511,139 @@ router.get('/info', async (req: Request, res: Response): Promise<void> => {
     sendError(res, 'Unable to retrieve API information', 500);
   }
 });
+
+/**
+ * POST /analysis/live
+ * Live Capture Analysis (Video + Audio blobs)
+ * 
+ * Accepts video and audio blobs from live capture,
+ * stores them for processing, and returns analysis ID
+ */
+router.post(
+  '/live',
+  upload.fields([
+    { name: 'video', maxCount: 1 },
+    { name: 'audio', maxCount: 1 }
+  ]),
+  async (req: Request, res: Response): Promise<void> => {
+    let uploadedFiles: any = req.files;
+    let analysisId: string | null = null;
+
+    try {
+      const { mode } = req.body;
+      const files = uploadedFiles as any;
+      const userId = (req as any).user?.id || 'anonymous';
+
+      // Validate mode
+      if (!['business', 'hr', 'investigation'].includes(mode?.toLowerCase())) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid mode. Must be business, hr, or investigation.'
+        });
+        return;
+      }
+
+      // Validate files
+      if (!files || !files.video || !files.audio) {
+        res.status(400).json({
+          success: false,
+          error: 'Missing required files. Please provide both video and audio.'
+        });
+        return;
+      }
+
+      // Create analysis record
+      analysisId = randomUUID();
+      const modeUpper = mode.toUpperCase();
+
+      await analysisRepository.createAnalysis({
+        id: analysisId,
+        userId,
+        mode: modeUpper === 'INVESTIGATION' ? 'INVESTIGATION' : (modeUpper === 'HR' ? 'HR' : 'BUSINESS'),
+        inputMethod: 'live',
+        videoUrl: files.video[0].path,
+        audioUrl: files.audio[0].path,
+      });
+
+      const videoPath = files.video[0].path;
+      const audioPath = files.audio[0].path;
+
+      console.log('🎥 Starting live capture analysis...', {
+        analysisId,
+        mode: modeUpper,
+        video: videoPath,
+        audio: audioPath
+      });
+
+      // Call appropriate Flask analysis
+      let result;
+
+      switch (modeUpper) {
+        case 'BUSINESS':
+          result = await flaskAIService.analyzeBusinessMode({
+            audioPath,
+            imagePath: null,
+            text: ''
+          });
+          break;
+        case 'HR':
+          result = await flaskAIService.analyzeHRMode({
+            audioPath,
+            imagePath: null,
+            text: ''
+          });
+          break;
+        case 'INVESTIGATION':
+          result = await flaskAIService.analyzeInvestigationMode({
+            audioPath,
+            imagePath: null,
+            text: ''
+          });
+          break;
+        default:
+          result = { success: false, message: 'Invalid mode' };
+      }
+
+      console.log('✓ Live analysis complete');
+
+      // Store result in database
+      if (result?.success) {
+        const analysisData = result.data || {};
+        await analysisRepository.completeAnalysis(analysisId, {
+          confidence: analysisData.confidence || 0.85,
+          summary: analysisData.summary,
+          faceAnalysis: analysisData.faceAnalysis,
+          voiceAnalysis: analysisData.voiceAnalysis,
+          credibilityAnalysis: analysisData.credibilityAnalysis,
+          recommendations: analysisData.recommendations || [],
+        });
+
+        sendSuccess(res, {
+          id: analysisId,
+          mode: modeUpper,
+          status: 'completed',
+          ...result.data,
+          videoPath,
+          audioPath,
+          inputMethod: 'live'
+        }, 201);
+      } else {
+        await analysisRepository.failAnalysis(analysisId, result?.message || 'Analysis failed');
+        sendError(res, result?.message || 'Analysis completed with errors', 200);
+      }
+
+    } catch (error: any) {
+      console.error('❌ Live analysis error:', error);
+      if (analysisId) {
+        await analysisRepository.failAnalysis(analysisId, error.message || 'Unexpected error');
+      }
+      sendError(res, error.message || 'Live analysis failed', 500);
+
+    } finally {
+      cleanupFiles(uploadedFiles);
+    }
+  }
+);
 
 /**
  * GET /analysis/cache
