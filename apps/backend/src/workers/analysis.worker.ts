@@ -164,7 +164,7 @@ class AnalysisWorker {
       return {
         success: true,
         analysisId,
-        ...analysisResult,
+        data: analysisResult,
       };
     } catch (error) {
       const err = error as Error;

@@ -31,7 +31,7 @@ export interface AnalysisJobData {
   analysisId: string;
   userId: string;
   mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW';
-  inputMethod: 'live' | 'upload';
+  inputMethod: 'live' | 'upload' | 'text';
   audioPath?: string;
   imagePath?: string;
   textInput?: string;
@@ -119,7 +119,7 @@ export const getJobStatus = async (jobId: string) => {
   if (!job) return null;
 
   const state = await job.getState();
-  const progress = job.progress();
+  const progress = job.progress || 0;
   const attempts = job.attemptsMade;
 
   return {

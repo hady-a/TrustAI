@@ -9,6 +9,7 @@ import { flaskAIService } from '../services/flask.ai.service';
 import { logger } from '../config/logger';
 import { redisClient } from '../config/queue';
 import { randomUUID } from 'crypto';
+import { hasAudioFile, getFirstAudioFile, hasImageFile, getFirstImageFile } from '../utils/file.utils';
 
 const router = Router();
 
@@ -48,21 +49,21 @@ router.post(
     const userId = (req as any).user.id;
     const mode = 'BUSINESS';
 
+    // Validate at least one input is provided
+    const hasAudio = hasAudioFile(req);
+    const hasImage = hasImageFile(req);
+    const hasText = req.body.text && req.body.text.trim().length > 0;
+
     logger.info(
       {
         userId,
         mode,
-        hasAudio: !!req.files?.audio,
-        hasImage: !!req.files?.image,
-        hasText: !!req.body.text,
+        hasAudio,
+        hasImage,
+        hasText,
       },
       'Business analysis request received'
     );
-
-    // Validate at least one input is provided
-    const hasAudio = req.files?.audio && req.files.audio.length > 0;
-    const hasImage = req.files?.image && req.files.image.length > 0;
-    const hasText = req.body.text && req.body.text.trim().length > 0;
 
     if (!hasAudio && !hasImage && !hasText) {
       throw new ValidationError(
@@ -92,7 +93,10 @@ router.post(
     try {
       // Save audio file if provided
       if (hasAudio) {
-        const audioFile = (req.files?.audio as any)[0];
+        const audioFile = getFirstAudioFile(req);
+        if (!audioFile) {
+          throw new ValidationError('Audio file is missing');
+        }
 
         // Validate file
         const validation = fileUploadService.validateFile(
@@ -103,7 +107,7 @@ router.post(
         );
 
         if (!validation.valid) {
-          throw new ValidationError(validation.error);
+          throw new ValidationError(validation.error || 'Audio file validation failed');
         }
 
         audioPath = await fileUploadService.saveUploadedFile(
@@ -118,7 +122,10 @@ router.post(
 
       // Save image file if provided
       if (hasImage) {
-        const imageFile = (req.files?.image as any)[0];
+        const imageFile = getFirstImageFile(req);
+        if (!imageFile) {
+          throw new ValidationError('Image file is missing');
+        }
 
         // Validate file
         const validation = fileUploadService.validateFile(
@@ -129,7 +136,7 @@ router.post(
         );
 
         if (!validation.valid) {
-          throw new ValidationError(validation.error);
+          throw new ValidationError(validation.error || 'Image file validation failed');
         }
 
         imagePath = await fileUploadService.saveUploadedFile(
@@ -203,21 +210,21 @@ router.post(
     const userId = (req as any).user.id;
     const mode = 'CRIMINAL';
 
+    // Validate at least one input
+    const hasAudio = hasAudioFile(req);
+    const hasImage = hasImageFile(req);
+    const hasText = req.body.text && req.body.text.trim().length > 0;
+
     logger.info(
       {
         userId,
         mode,
-        hasAudio: !!req.files?.audio,
-        hasImage: !!req.files?.image,
-        hasText: !!req.body.text,
+        hasAudio,
+        hasImage,
+        hasText,
       },
       'Criminal investigation request received'
     );
-
-    // Validate at least one input
-    const hasAudio = req.files?.audio && req.files.audio.length > 0;
-    const hasImage = req.files?.image && req.files.image.length > 0;
-    const hasText = req.body.text && req.body.text.trim().length > 0;
 
     if (!hasAudio && !hasImage && !hasText) {
       throw new ValidationError(
@@ -236,7 +243,10 @@ router.post(
 
     try {
       if (hasAudio) {
-        const audioFile = (req.files?.audio as any)[0];
+        const audioFile = getFirstAudioFile(req);
+        if (!audioFile) {
+          throw new ValidationError('Audio file is missing');
+        }
         const validation = fileUploadService.validateFile(
           audioFile.buffer,
           'audio',
@@ -244,7 +254,7 @@ router.post(
           audioFile.originalname
         );
         if (!validation.valid) {
-          throw new ValidationError(validation.error);
+          throw new ValidationError(validation.error || 'Audio file validation failed');
         }
 
         audioPath = await fileUploadService.saveUploadedFile(
@@ -256,7 +266,10 @@ router.post(
       }
 
       if (hasImage) {
-        const imageFile = (req.files?.image as any)[0];
+        const imageFile = getFirstImageFile(req);
+        if (!imageFile) {
+          throw new ValidationError('Image file is missing');
+        }
         const validation = fileUploadService.validateFile(
           imageFile.buffer,
           'image',
@@ -264,7 +277,7 @@ router.post(
           imageFile.originalname
         );
         if (!validation.valid) {
-          throw new ValidationError(validation.error);
+          throw new ValidationError(validation.error || 'Image file validation failed');
         }
 
         imagePath = await fileUploadService.saveUploadedFile(
@@ -318,20 +331,21 @@ router.post(
     const userId = (req as any).user.id;
     const mode = 'INTERVIEW';
 
+    // Validate at least one input
+    const hasAudio = hasAudioFile(req);
+    const hasImage = hasImageFile(req);
+    const hasText = req.body.text && req.body.text.trim().length > 0;
+
     logger.info(
       {
         userId,
         mode,
-        hasAudio: !!req.files?.audio,
-        hasImage: !!req.files?.image,
-        hasText: !!req.body.text,
+        hasAudio,
+        hasImage,
+        hasText,
       },
       'Interview analysis request received'
     );
-
-    const hasAudio = req.files?.audio && req.files.audio.length > 0;
-    const hasImage = req.files?.image && req.files.image.length > 0;
-    const hasText = req.body.text && req.body.text.trim().length > 0;
 
     if (!hasAudio && !hasImage && !hasText) {
       throw new ValidationError(
@@ -350,7 +364,10 @@ router.post(
 
     try {
       if (hasAudio) {
-        const audioFile = (req.files?.audio as any)[0];
+        const audioFile = getFirstAudioFile(req);
+        if (!audioFile) {
+          throw new ValidationError('Audio file is missing');
+        }
         const validation = fileUploadService.validateFile(
           audioFile.buffer,
           'audio',
@@ -358,7 +375,7 @@ router.post(
           audioFile.originalname
         );
         if (!validation.valid) {
-          throw new ValidationError(validation.error);
+          throw new ValidationError(validation.error || 'Audio file validation failed');
         }
 
         audioPath = await fileUploadService.saveUploadedFile(
@@ -370,7 +387,10 @@ router.post(
       }
 
       if (hasImage) {
-        const imageFile = (req.files?.image as any)[0];
+        const imageFile = getFirstImageFile(req);
+        if (!imageFile) {
+          throw new ValidationError('Image file is missing');
+        }
         const validation = fileUploadService.validateFile(
           imageFile.buffer,
           'image',
@@ -378,7 +398,7 @@ router.post(
           imageFile.originalname
         );
         if (!validation.valid) {
-          throw new ValidationError(validation.error);
+          throw new ValidationError(validation.error || 'Image file validation failed');
         }
 
         imagePath = await fileUploadService.saveUploadedFile(

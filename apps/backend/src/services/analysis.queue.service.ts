@@ -14,7 +14,7 @@ import { eq } from 'drizzle-orm';
 export interface CreateAnalysisJobParams {
   userId: string;
   mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW';
-  inputMethod: 'live' | 'upload';
+  inputMethod: 'live' | 'upload' | 'text';
   audioPath?: string;
   imagePath?: string;
   textInput?: string;
@@ -72,7 +72,7 @@ class AnalysisQueueService {
       };
 
       // Add job to queue
-      const job = await analysisQueue.add(jobData, {
+      const job = await analysisQueue.add('analysis', jobData, {
         jobId: analysisId,
         // Priority: 'live' mode has higher priority
         priority: params.inputMethod === 'live' ? 10 : 5,
@@ -82,7 +82,7 @@ class AnalysisQueueService {
       logJob(analysisId, 'started', {
         userId: params.userId,
         mode: params.mode,
-        userId: params.inputMethod,
+        inputMethod: params.inputMethod,
       });
 
       // Get queue status for estimated wait time
@@ -128,7 +128,7 @@ class AnalysisQueueService {
       if (!job) return null;
 
       const state = await job.getState();
-      const progress = job.progress() as number;
+      const progress = typeof job.progress === 'number' ? job.progress : 0;
 
       // Map job state to readable status
       const statusMap: Record<string, string> = {
@@ -197,7 +197,7 @@ class AnalysisQueueService {
       if (!job) return null;
 
       const state = await job.getState();
-      const progress = job.progress() as number;
+      const progress = typeof job.progress === 'number' ? job.progress : 0;
 
       return {
         id: job.id,
@@ -330,7 +330,7 @@ class AnalysisQueueService {
       return jobs.map((job) => ({
         id: job.id,
         data: job.data,
-        state: job._progress, // Will be empty for completed/failed
+        progress: job.progress || 0,
         createdAt: new Date(job.timestamp).toISOString(),
         finishedOn: job.finishedOn ? new Date(job.finishedOn).toISOString() : null,
         failedReason: job.failedReason,
