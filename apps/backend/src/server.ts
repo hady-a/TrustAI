@@ -18,6 +18,7 @@ import cors from "cors";
 import pinoHttp from 'pino-http';
 import { logger } from './lib/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { requestIdMiddleware } from './middleware/requestId.middleware';
 import { setupSwagger } from './lib/swagger';
 import { generalLimiter } from './middleware/rateLimiter.middleware';
 import authRoutes from './routes/auth.routes';
@@ -68,6 +69,9 @@ const corsOptions = {
 // ============================================================================
 // MIDDLEWARE SETUP
 // ============================================================================
+
+// Request ID middleware MUST be first to track all requests
+app.use(requestIdMiddleware);
 
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
