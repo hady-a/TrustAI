@@ -23,8 +23,9 @@ export function useAnswerRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   /**
@@ -68,6 +69,8 @@ export function useAnswerRecorder() {
    */
   const startRecording = async (stream: MediaStream) => {
     try {
+      // Store stream for cleanup
+      streamRef.current = stream;
       audioChunksRef.current = [];
 
       const recorder = new MediaRecorder(stream, {
@@ -127,6 +130,13 @@ export function useAnswerRecorder() {
         // Clear timer
         if (timerIntervalRef.current) {
           clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+        }
+
+        // Stop all audio tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
         }
 
         resolve(audioBlob);
@@ -144,6 +154,18 @@ export function useAnswerRecorder() {
       mediaRecorderRef.current.stop();
     }
 
+    // Clear timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    // Stop all audio tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
     audioChunksRef.current = [];
 
     setState((prev) => ({
@@ -153,10 +175,6 @@ export function useAnswerRecorder() {
       audioBlob: null,
       micLevel: 0,
     }));
-
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-    }
   };
 
   /**
@@ -164,12 +182,27 @@ export function useAnswerRecorder() {
    */
   useEffect(() => {
     return () => {
-      discardRecording();
+      // Stop recorder if active
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
 
+      // Clear all timers
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+
+      // Cancel animation frame
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
 
+      // Stop all audio tracks
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      // Close audio context
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }

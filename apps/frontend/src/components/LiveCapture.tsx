@@ -11,10 +11,12 @@ interface LiveCaptureProps {
 export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: LiveCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
@@ -36,6 +38,9 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
           video: { width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: true,
         });
+
+        // Store stream in ref for later cleanup and access
+        streamRef.current = stream;
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -59,10 +64,32 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
 
     requestPermissions();
 
+    // Cleanup on component unmount
     return () => {
+      // Stop animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+
+      // Stop recording if active
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+
+      // Clear video srcObject
       if (videoRef.current?.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach((track) => track.stop());
+        videoRef.current.srcObject = null;
+      }
+
+      // Stop all media tracks
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+
+      // Clear timer if recording
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
       }
     };
   }, []);
@@ -98,7 +125,7 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
   };
 
   const startRecording = async () => {
-    if (!videoRef.current?.srcObject) {
+    if (!videoRef.current?.srcObject || !streamRef.current) {
       setError("Camera stream not available");
       return;
     }
@@ -108,7 +135,7 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
       audioChunksRef.current = [];
       recordingStartTimeRef.current = Date.now();
 
-      const stream = videoRef.current.srcObject as MediaStream;
+      const stream = streamRef.current;
       const videoTrack = stream.getVideoTracks()[0];
       const audioTrack = stream.getAudioTracks()[0];
 
@@ -142,8 +169,8 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
           setIsRecording(true);
           setRecordingTime(0);
 
-          // Update recording time
-          const timer = setInterval(() => {
+          // Update recording time - store in ref for cleanup
+          recordingTimerRef.current = setInterval(() => {
             setRecordingTime((prev) => prev + 1);
           }, 1000);
 
@@ -151,12 +178,10 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
           const drawFrame = () => {
             if (videoRef.current && ctx && isRecording) {
               ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-              requestAnimationFrame(drawFrame);
+              animationFrameRef.current = requestAnimationFrame(drawFrame);
             }
           };
           drawFrame();
-
-          return () => clearInterval(timer);
         }
       }
     } catch (err) {
@@ -180,6 +205,31 @@ export default function LiveCapture({ onAnalysisStart, isAnalyzing, mode }: Live
           });
 
           setIsRecording(false);
+
+          // Stop recording timer
+          if (recordingTimerRef.current) {
+            clearInterval(recordingTimerRef.current);
+            recordingTimerRef.current = null;
+          }
+
+          // Stop animation frame
+          if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+          }
+
+          // Clear video srcObject
+          if (videoRef.current?.srcObject) {
+            videoRef.current.srcObject = null;
+          }
+
+          // Stop all media tracks from the stored stream
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => {
+              track.stop();
+            });
+          }
+
           await onAnalysisStart(videoBlob, audioBlob);
           resolve();
         };
