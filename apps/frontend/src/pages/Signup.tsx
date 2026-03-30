@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { authAPI } from "../lib/api"
 import { useOnboarding } from "../contexts/OnboardingContext"
-import { Icon } from "../components/UI/IconRenderer"
 import { AxiosError } from "axios"
 
 export default function Signup() {
@@ -425,7 +424,7 @@ export default function Signup() {
                     transition={{ delay: 0.15 }}
                   >
                     <label className="flex text-xs font-bold text-gray-300 mb-2 items-center gap-2 uppercase tracking-wider">
-                      <Icon emoji="👤" inline={true} /> Full Name
+                      <span>👤</span> Full Name
                     </label>
                     <motion.input
                       type="text"
@@ -462,7 +461,7 @@ export default function Signup() {
                     transition={{ delay: 0.2 }}
                   >
                     <label className="flex text-xs font-bold text-gray-300 mb-2 items-center gap-2 uppercase tracking-wider">
-                      <Icon emoji="📧" inline={true} /> Email
+                      <span>📧</span> Email
                     </label>
                     <motion.input
                       type="email"
@@ -597,7 +596,7 @@ export default function Signup() {
                     transition={{ delay: 0.15 }}
                   >
                     <label className="flex text-xs font-bold text-gray-300 mb-2 items-center gap-2 uppercase tracking-wider">
-                      <Icon emoji="🔒" inline={true} /> Password
+                      <span>🔒</span> Password
                     </label>
                     <motion.div
                       animate={{
@@ -626,7 +625,7 @@ export default function Signup() {
                         whileTap={{ scale: 0.9 }}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
                       >
-                        <Icon emoji={showPassword ? "👁️" : "🔒"} inline={true} />
+                        <span>{showPassword ? "👁️" : "🔒"}</span>
                       </motion.button>
                     </motion.div>
 
@@ -673,7 +672,7 @@ export default function Signup() {
                     transition={{ delay: 0.2 }}
                   >
                     <label className="flex text-xs font-bold text-gray-300 mb-2 items-center gap-2 uppercase tracking-wider">
-                      <Icon emoji="✓" inline={true} /> Confirm Password
+                      <span>✓</span> Confirm Password
                     </label>
                     <motion.div
                       animate={{
@@ -702,7 +701,7 @@ export default function Signup() {
                         whileTap={{ scale: 0.9 }}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
                       >
-                        <Icon emoji={showConfirmPassword ? "👁️" : "🔒"} inline={true} />
+                        <span>{showConfirmPassword ? "👁️" : "🔒"}</span>
                       </motion.button>
                     </motion.div>
                     {formData.confirmPassword && formData.password === formData.confirmPassword && (

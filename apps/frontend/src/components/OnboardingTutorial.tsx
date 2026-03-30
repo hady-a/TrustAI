@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOnboarding } from '../contexts/OnboardingContext'
-import { Icon } from './UI/IconRenderer'
 
 const ONBOARDING_STEPS = [
   {
@@ -87,7 +86,7 @@ export default function OnboardingTutorial() {
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-2">
-                <Icon emoji={currentStep.emoji} size="lg" inline={false} />
+                <span className="text-2xl">{currentStep.emoji}</span>
                 <h3 className="text-2xl font-bold text-white">{currentStep.title}</h3>
               </div>
               <button
@@ -139,7 +138,7 @@ export default function OnboardingTutorial() {
             {/* Tips */}
             {currentStepIndex < ONBOARDING_STEPS.length - 1 && (
               <p className="text-gray-500 text-xs mt-4 text-center">
-                <Icon emoji="💡" inline={true} />Press ? anytime to view keyboard shortcuts
+                <span>💡</span>Press ? anytime to view keyboard shortcuts
               </p>
             )}
           </motion.div>

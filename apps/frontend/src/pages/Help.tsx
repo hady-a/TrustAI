@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Icon } from "../components/UI/IconRenderer"
 import { useState, useEffect } from "react"
 import { useTheme } from "../contexts/ThemeContext"
 
@@ -121,7 +120,7 @@ export default function Help() {
           >
             <motion.span animate={{ x: [0, -3, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>←</motion.span> Back
           </motion.button>
-          <h1 className={`text-2xl font-black bg-gradient-to-r ${theme === 'dark' ? 'from-cyan-400 via-purple-400 to-pink-400' : 'from-indigo-600 via-purple-600 to-pink-600'} bg-clip-text text-transparent`}><Icon emoji="📙" inline={true} />Help & Support</h1>
+          <h1 className={`text-2xl font-black bg-gradient-to-r ${theme === 'dark' ? 'from-cyan-400 via-purple-400 to-pink-400' : 'from-indigo-600 via-purple-600 to-pink-600'} bg-clip-text text-transparent`}>📙Help & Support</h1>
           <div className="w-24"></div>
         </div>
       </motion.div>
@@ -140,7 +139,7 @@ export default function Help() {
               transition={{ duration: 3, repeat: Infinity }}
               className="text-7xl mb-6 inline-block"
             >
-              <Icon emoji="🤖" size="lg" inline={false} />
+              🤖
             </motion.div>
             <h2 className="text-5xl font-black bg-gradient-to-r from-white via-purple-200 to-cyan-200 bg-clip-text text-transparent mb-4">
               Welcome to TrustAI
@@ -243,7 +242,7 @@ export default function Help() {
                     transition={{ duration: 2, repeat: Infinity, delay: index * 0.1 }}
                     className="text-5xl mb-4 relative z-10"
                   >
-                    <Icon emoji={feature.icon} size="lg" inline={false} />
+                    {feature.icon}
                   </motion.div>
                   <h4 className={`text-xl font-bold mb-3 relative z-10 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{feature.title}</h4>
                   <p className={`text-sm leading-relaxed relative z-10 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>{feature.description}</p>
@@ -295,7 +294,7 @@ export default function Help() {
                     transition={{ duration: 2, repeat: Infinity, delay: index * 0.1 }}
                     className="text-4xl mb-3 relative z-10"
                   >
-                    <Icon emoji={method.icon} size="lg" inline={false} />
+                    {method.icon}
                   </motion.div>
                   <h4 className={`font-bold mb-2 transition-colors relative z-10 ${theme === 'dark' ? 'text-white group-hover:text-cyan-300' : 'text-gray-900 group-hover:text-cyan-600'}`}>{method.label}</h4>
                   <p className={`font-semibold text-lg relative z-10 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{method.value}</p>

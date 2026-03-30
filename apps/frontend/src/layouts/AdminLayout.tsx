@@ -1,7 +1,6 @@
 import type { ReactNode } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
-import { Icon } from "../components/UI/IconRenderer"
 import { authAPI } from "../lib/api"
 import Navbar from "../components/Navbar"
 
@@ -105,7 +104,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                             : "dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800/50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-2 border-transparent hover:border-indigo-200"
                                         }`}
                                     >
-                                        <Icon emoji={item.icon} inline={true} />
+                                        <span>{item.icon}</span>
                                         <span className="font-semibold text-sm">{item.name}</span>
                                         {isActive && (
                                             <motion.div
@@ -127,7 +126,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             onClick={handleLogout}
                             className="w-full flex items-center gap-3 px-4 py-3 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-400/10 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all font-semibold border-2 border-transparent hover:border-red-200 dark:hover:border-red-500/30"
                         >
-                            <Icon emoji="🚪" inline={true} />
+                            <span>🚪</span>
                             <span>Logout</span>
                         </motion.button>
                     </div>

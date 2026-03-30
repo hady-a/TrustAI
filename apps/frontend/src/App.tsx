@@ -1,37 +1,36 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
+import { lazy, Suspense } from "react"
 import { GoogleOAuthProvider } from "@react-oauth/google"
 import { useSessionTimeout } from "./hooks/useSessionTimeout"
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts"
 import { useServiceWorker } from "./hooks/useServiceWorker"
 import { ThemeProvider } from "./contexts/ThemeContext"
 import { NotificationsProvider } from "./contexts/NotificationsContext"
-import { OnboardingProvider } from "./contexts/OnboardingContext"
-import { OfflineProvider } from "./contexts/OfflineContext"
-import SessionWarning from "./components/SessionWarning"
-import KeyboardShortcutsHelp from "./components/KeyboardShortcutsHelp"
-import OnboardingTutorial from "./components/OnboardingTutorial"
-import PWAUpdateNotif from "./components/PWAUpdateNotif"
-import OfflineIndicator from "./components/OfflineIndicator"
-import UserProfile from "./pages/UserProfile"
-import UploadAnalysis from "./pages/UploadAnalysis"
-import CriminalAnalysis from "./pages/CriminalAnalysis"
-import InterviewAnalysis from "./pages/InterviewAnalysis"
-import BusinessAnalysis from "./pages/BusinessAnalysis"
-import MicrophoneStream from "./pages/MicrophoneStream"
-import ResultsPage from "./pages/ResultsPage"
-import Help from "./pages/Help"
-import AdvancedFeaturesDemo from "./pages/AdvancedFeaturesDemo"
 import MainLayout from "./layouts/MainLayout"
 import PublicLayout from "./layouts/PublicLayout"
 import AdminLayout from "./layouts/AdminLayout"
-import AdminDashboardNew from "./pages/admin/AdminDashboardNew"
-import AdminUsers from "./pages/admin/AdminUsers"
-import AdminLogs from "./pages/admin/AdminLogs"
-import AdminBackups from "./pages/admin/AdminBackups"
-import AdminSettings from "./pages/admin/AdminSettings"
-import LoginNew from "./pages/LoginNew"
-import SignupNew from "./pages/SignupNew"
-import ModeSelectionNew from "./pages/ModeSelectionNew"
+
+// Lazy load pages for code splitting
+const UserProfile = lazy(() => import("./pages/UserProfile"))
+const UploadAnalysis = lazy(() => import("./pages/UploadAnalysis"))
+const CriminalAnalysis = lazy(() => import("./pages/CriminalAnalysis"))
+const InterviewAnalysis = lazy(() => import("./pages/InterviewAnalysis"))
+const BusinessAnalysis = lazy(() => import("./pages/BusinessAnalysis"))
+const MicrophoneStream = lazy(() => import("./pages/MicrophoneStream"))
+const ResultsPage = lazy(() => import("./pages/ResultsPage"))
+const Help = lazy(() => import("./pages/Help"))
+const AdvancedFeaturesDemo = lazy(() => import("./pages/AdvancedFeaturesDemo"))
+const AdminDashboardNew = lazy(() => import("./pages/admin/AdminDashboardNew"))
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"))
+const AdminLogs = lazy(() => import("./pages/admin/AdminLogs"))
+const AdminBackups = lazy(() => import("./pages/admin/AdminBackups"))
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"))
+const LoginNew = lazy(() => import("./pages/LoginNew"))
+const SignupNew = lazy(() => import("./pages/SignupNew"))
+const ModeSelectionNew = lazy(() => import("./pages/ModeSelectionNew"))
+
+// Loading component
+const PageLoader = () => <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>
 
 function AppRoutes() {
   useSessionTimeout()
@@ -39,12 +38,7 @@ function AppRoutes() {
   useServiceWorker()
 
   return (
-    <>
-      <SessionWarning />
-      <KeyboardShortcutsHelp />
-      <OnboardingTutorial />
-      <PWAUpdateNotif />
-      <OfflineIndicator />
+    <Suspense fallback={<PageLoader />}>
       <Routes>
         {/* Admin Routes */}
         <Route path="/admin" element={<AdminLayout><AdminDashboardNew /></AdminLayout>} />
@@ -78,7 +72,7 @@ function AppRoutes() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </>
+    </Suspense>
   )
 }
 
@@ -89,13 +83,9 @@ export default function App() {
     <GoogleOAuthProvider clientId={googleClientId}>
       <ThemeProvider>
         <NotificationsProvider>
-          <OnboardingProvider>
-            <OfflineProvider>
-              <Router>
-                <AppRoutes />
-              </Router>
-            </OfflineProvider>
-          </OnboardingProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
         </NotificationsProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>

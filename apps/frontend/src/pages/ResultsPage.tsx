@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Download, Share2, AlertCircle, CheckCircle2, TrendingUp, Loader, ArrowLeft } from "lucide-react";
-import { jsPDF } from "jspdf";
 import { analysisAPI } from "../lib/api";
 
 interface AnalysisData {
@@ -87,6 +86,8 @@ export default function ResultsPage({ mode }: ResultsPageProps) {
 
     setIsPdfGenerating(true);
     try {
+      // Lazy load jsPDF only when needed
+      const { jsPDF } = await import("jspdf");
       const pdf = new jsPDF();
       const config = getModeConfig();
       const pageWidth = pdf.internal.pageSize.getWidth();

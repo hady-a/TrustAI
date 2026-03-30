@@ -62,18 +62,18 @@ export default function SignupNew() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) return
-    
+
     setIsLoading(true)
     try {
       const response = await api.post('/auth/signup', {
-        fullName: formData.fullName,
+        name: formData.fullName,
         email: formData.email,
         password: formData.password,
       })
-      
-      if (response.data.success) {
+
+      if (response.data.success && response.data.data?.token) {
         sessionStorage.setItem('signupEmail', formData.email)
         setStep('verify')
         showToast('success', 'Account created! Redirecting to login...')
@@ -88,6 +88,49 @@ export default function SignupNew() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    try {
+      setIsLoading(true)
+      console.log('[Google] 🔐 Google credential received for signup')
+
+      if (!credentialResponse?.credential) {
+        throw new Error('No credential in response')
+      }
+
+      console.log('[Google] 📤 Sending credential to backend')
+      const response = await api.post('/auth/google-login', {
+        credential: credentialResponse.credential,
+      })
+
+      console.log('[Google] ✅ Backend verified token, status:', response.status)
+
+      if (response.data?.success && response.data?.data?.token) {
+        const { token, user } = response.data.data
+
+        console.log('[Google] 💾 Storing auth token and user')
+        localStorage.setItem('authToken', token)
+        localStorage.setItem('user', JSON.stringify(user))
+
+        setIsLoading(false)
+        showToast('success', '✅ Google signup successful!')
+        console.log('[Google] 🚀 Navigating to /modes')
+        navigate('/modes', { replace: true })
+      } else {
+        throw new Error('Invalid response from server')
+      }
+    } catch (error: any) {
+      console.error('[Google] ❌ Error:', error)
+      const message = error.response?.data?.message || error.message || 'Google signup failed'
+      showToast('error', message)
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleError = () => {
+    console.error('[Google] ❌ Google sign-up failed')
+    showToast('error', 'Google signup failed. Please try again.')
   }
 
   const containerVariants = {
@@ -326,12 +369,10 @@ export default function SignupNew() {
 
                 <motion.div variants={itemVariants}>
                   <GoogleLogin
-                    onSuccess={(credentialResponse) => {
-                      console.log('Google signup:', credentialResponse)
-                    }}
-                    onError={() => console.log('Signup Failed')}
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
                     text="signup_with"
-                    width="100%"
+                    theme="outline"
                   />
                 </motion.div>
 

@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
-import { jsPDF } from "jspdf"
-import "jspdf-autotable"
-import { Document, Packer, Paragraph } from "docx"
 import {
     AreaChart,
     Area,
@@ -123,112 +120,127 @@ export default function AdminDashboard() {
             setLoading(false)
         }
     }
-    const generatePDFReport = (metrics: any) => {
-        const pdf = new jsPDF()
-        const pageWidth = pdf.internal.pageSize.getWidth()
-        let yPosition = 20
+    const generatePDFReport = async (metrics: any) => {
+        try {
+            // Lazy load jsPDF only when needed
+            const { jsPDF } = await import("jspdf")
+            await import("jspdf-autotable") // Side effect import for autotable
+            
+            const pdf = new jsPDF()
+            const pageWidth = pdf.internal.pageSize.getWidth()
+            let yPosition = 20
 
-        // Header
-        pdf.setFontSize(24)
-        pdf.text("TrustAI System Report", pageWidth / 2, yPosition, { align: "center" })
-        yPosition += 15
+            // Header
+            pdf.setFontSize(24)
+            pdf.text("TrustAI System Report", pageWidth / 2, yPosition, { align: "center" })
+            yPosition += 15
 
-        // Date
-        pdf.setFontSize(11)
-        pdf.setTextColor(100, 100, 100)
-        pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" })
-        yPosition += 20
+            // Date
+            pdf.setFontSize(11)
+            pdf.setTextColor(100, 100, 100)
+            pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" })
+            yPosition += 20
 
-        // System Metrics Section
-        pdf.setTextColor(0, 0, 0)
-        pdf.setFontSize(14)
-        pdf.text("System Metrics", 20, yPosition)
-        yPosition += 12
+            // System Metrics Section
+            pdf.setTextColor(0, 0, 0)
+            pdf.setFontSize(14)
+            pdf.text("System Metrics", 20, yPosition)
+            yPosition += 12
 
-        pdf.setFontSize(11)
-        const metricsText = [
-            `Total Users: ${metrics?.totalUsers?.toLocaleString() || "0"}`,
-            `Total Analyses: ${metrics?.totalAnalyses?.toLocaleString() || "0"}`,
-            `API Uptime: ${metrics?.apiUptime || "99.8%"}`,
-            `Database Status: ${metrics?.dbStatus || "Healthy"}`,
-            `Current Load: ${metrics?.currentLoad || "34%"}`,
-            `Cache Hit Rate: ${metrics?.cacheHitRate || "87.5%"}`,
-            `Average Response Time: ${metrics?.avgResponseTime || "145ms"}`,
-        ]
+            pdf.setFontSize(11)
+            const metricsText = [
+                `Total Users: ${metrics?.totalUsers?.toLocaleString() || "0"}`,
+                `Total Analyses: ${metrics?.totalAnalyses?.toLocaleString() || "0"}`,
+                `API Uptime: ${metrics?.apiUptime || "99.8%"}`,
+                `Database Status: ${metrics?.dbStatus || "Healthy"}`,
+                `Current Load: ${metrics?.currentLoad || "34%"}`,
+                `Cache Hit Rate: ${metrics?.cacheHitRate || "87.5%"}`,
+                `Average Response Time: ${metrics?.avgResponseTime || "145ms"}`,
+            ]
 
-        metricsText.forEach(text => {
-            pdf.text(text, 25, yPosition)
-            yPosition += 8
-        })
+            metricsText.forEach(text => {
+                pdf.text(text, 25, yPosition)
+                yPosition += 8
+            })
 
-        yPosition += 10
+            yPosition += 10
 
-        // Health Status Section
-        pdf.setFontSize(14)
-        pdf.text("System Health Status", 20, yPosition)
-        yPosition += 12
+            // Health Status Section
+            pdf.setFontSize(14)
+            pdf.text("System Health Status", 20, yPosition)
+            yPosition += 12
 
-        pdf.setFontSize(11)
-        const healthText = [
-            "Database: Healthy (99.9% uptime)",
-            "API Server: Operational (99.8% uptime)",
-            "Queue Processing: Active (100% uptime)",
-            "Storage: Operational (99.95% uptime)",
-        ]
+            pdf.setFontSize(11)
+            const healthText = [
+                "Database: Healthy (99.9% uptime)",
+                "API Server: Operational (99.8% uptime)",
+                "Queue Processing: Active (100% uptime)",
+                "Storage: Operational (99.95% uptime)",
+            ]
 
-        healthText.forEach(text => {
-            pdf.text(text, 25, yPosition)
-            yPosition += 8
-        })
+            healthText.forEach(text => {
+                pdf.text(text, 25, yPosition)
+                yPosition += 8
+            })
 
-        // Footer
-        pdf.setFontSize(9)
-        pdf.setTextColor(150, 150, 150)
-        pdf.text(
-            "TrustAI Admin Report - Confidential",
-            pageWidth / 2,
-            pdf.internal.pageSize.getHeight() - 10,
-            { align: "center" }
-        )
+            // Footer
+            pdf.setFontSize(9)
+            pdf.setTextColor(150, 150, 150)
+            pdf.text(
+                "TrustAI Admin Report - Confidential",
+                pageWidth / 2,
+                pdf.internal.pageSize.getHeight() - 10,
+                { align: "center" }
+            )
 
-        pdf.save(`TrustAI_System_Report_${new Date().toISOString().split("T")[0]}.pdf`)
+            pdf.save(`TrustAI_System_Report_${new Date().toISOString().split("T")[0]}.pdf`)
+        } catch (error) {
+            console.error("PDF generation error:", error)
+        }
     }
 
-    const generateWordReport = (metrics: any) => {
-        const doc = new Document({
-            sections: [
-                {
-                    children: [
-                        new Paragraph("TrustAI System Report"),
-                        new Paragraph(`Generated: ${new Date().toLocaleString()}`),
-                        new Paragraph(""),
-                        new Paragraph("System Metrics"),
-                        new Paragraph(`Total Users: ${metrics?.totalUsers?.toLocaleString() || "0"}`),
-                        new Paragraph(`Total Analyses: ${metrics?.totalAnalyses?.toLocaleString() || "0"}`),
-                        new Paragraph(`API Uptime: ${metrics?.apiUptime || "99.8%"}`),
-                        new Paragraph(`Database Status: ${metrics?.dbStatus || "Healthy"}`),
-                        new Paragraph(`Current Load: ${metrics?.currentLoad || "34%"}`),
-                        new Paragraph(`Cache Hit Rate: ${metrics?.cacheHitRate || "87.5%"}`),
-                        new Paragraph(`Average Response Time: ${metrics?.avgResponseTime || "145ms"}`),
-                        new Paragraph(""),
-                        new Paragraph("System Health Status"),
-                        new Paragraph("Database: Healthy (99.9% uptime)"),
-                        new Paragraph("API Server: Operational (99.8% uptime)"),
-                        new Paragraph("Queue Processing: Active (100% uptime)"),
-                        new Paragraph("Storage: Operational (99.95% uptime)"),
-                    ],
-                },
-            ],
-        })
+    const generateWordReport = async (metrics: any) => {
+        try {
+            // Lazy load docx only when needed
+            const { Document, Packer, Paragraph } = await import("docx")
+            
+            const doc = new Document({
+                sections: [
+                    {
+                        children: [
+                            new Paragraph("TrustAI System Report"),
+                            new Paragraph(`Generated: ${new Date().toLocaleString()}`),
+                            new Paragraph(""),
+                            new Paragraph("System Metrics"),
+                            new Paragraph(`Total Users: ${metrics?.totalUsers?.toLocaleString() || "0"}`),
+                            new Paragraph(`Total Analyses: ${metrics?.totalAnalyses?.toLocaleString() || "0"}`),
+                            new Paragraph(`API Uptime: ${metrics?.apiUptime || "99.8%"}`),
+                            new Paragraph(`Database Status: ${metrics?.dbStatus || "Healthy"}`),
+                            new Paragraph(`Current Load: ${metrics?.currentLoad || "34%"}`),
+                            new Paragraph(`Cache Hit Rate: ${metrics?.cacheHitRate || "87.5%"}`),
+                            new Paragraph(`Average Response Time: ${metrics?.avgResponseTime || "145ms"}`),
+                            new Paragraph(""),
+                            new Paragraph("System Health Status"),
+                            new Paragraph("Database: Healthy (99.9% uptime)"),
+                            new Paragraph("API Server: Operational (99.8% uptime)"),
+                            new Paragraph("Queue Processing: Active (100% uptime)"),
+                            new Paragraph("Storage: Operational (99.95% uptime)"),
+                        ],
+                    },
+                ],
+            })
 
-        Packer.toBlob(doc).then((blob) => {
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement("a")
-            a.href = url
-            a.download = `TrustAI_System_Report_${new Date().toISOString().split("T")[0]}.docx`
-            a.click()
-            window.URL.revokeObjectURL(url)
-        })
+            Packer.toBlob(doc).then((blob) => {
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement("a")
+                a.href = url
+                a.download = `TrustAI_System_Report_${new Date().toISOString().split("T")[0]}.docx`
+                a.click()
+                window.URL.revokeObjectURL(url)
+            })
+        } catch (error) {
+            console.error("Word document generation error:", error)
+        }
     }
 
     const handleQuickAction = async (action: string, label: string) => {

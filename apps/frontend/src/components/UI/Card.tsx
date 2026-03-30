@@ -1,16 +1,16 @@
 import React from 'react'
-import { motion, MotionProps } from 'framer-motion'
+import { motion, type Transition } from 'framer-motion'
 
-interface CardProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-  Omit<MotionProps, 'children'> {
+interface CardProps {
   variant?: 'default' | 'outlined' | 'elevated' | 'gradient'
   hoverEffect?: boolean
   children: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
 }
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className = '', variant = 'default', hoverEffect = false, children, ...props }, ref) => {
+  ({ className = '', variant = 'default', hoverEffect = false, children, style }, ref) => {
     const baseClasses = 'rounded-xl backdrop-blur-sm transition-all duration-300'
     
     const variantClasses = {
@@ -20,17 +20,18 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       gradient: 'bg-gradient-to-br from-white/95 to-gray-50/95 dark:from-slate-900/50 dark:to-slate-800/30 shadow-md',
     }
 
+    const transitionConfig: Transition = { type: 'spring', stiffness: 300, damping: 30 }
     const motionProps = hoverEffect ? {
       whileHover: { y: -2, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' },
-      transition: { type: 'spring', stiffness: 300, damping: 30 },
+      transition: transitionConfig,
     } : {}
 
     return (
       <motion.div
         ref={ref}
+        style={style}
         className={`${baseClasses} ${variantClasses[variant]} ${className}`}
         {...motionProps}
-        {...props}
       >
         {children}
       </motion.div>

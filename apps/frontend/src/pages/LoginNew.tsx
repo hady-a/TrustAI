@@ -74,26 +74,27 @@ export default function LoginNew() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!validateForm()) return
-    
+
     setIsLoading(true)
     try {
       const response = await api.post('/auth/login', {
         email: formData.email,
         password: formData.password,
       })
-      
-      if (response.data.success) {
-        localStorage.setItem('authToken', response.data.token)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
-        
+
+      if (response.data.success && response.data.data?.token) {
+        const { token, user } = response.data.data
+        localStorage.setItem('authToken', token)
+        localStorage.setItem('user', JSON.stringify(user))
+
         if (rememberMe) {
           localStorage.setItem('rememberMe', 'true')
         }
-        
+
         showToast('success', 'Login successful!')
-        setTimeout(() => navigate('/modes'), 1000)
+        setTimeout(() => navigate('/modes', { replace: true }), 1000)
       }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Login failed. Please try again.'
@@ -104,20 +105,63 @@ export default function LoginNew() {
     }
   }
 
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    try {
+      setIsLoading(true)
+      console.log('[Google] 🔐 Google credential received')
+
+      if (!credentialResponse?.credential) {
+        throw new Error('No credential in response')
+      }
+
+      console.log('[Google] 📤 Sending credential to backend')
+      const response = await api.post('/auth/google-login', {
+        credential: credentialResponse.credential,
+      })
+
+      console.log('[Google] ✅ Backend verified token, status:', response.status)
+
+      if (response.data?.success && response.data?.data?.token) {
+        const { token, user } = response.data.data
+
+        console.log('[Google] 💾 Storing auth token and user')
+        localStorage.setItem('authToken', token)
+        localStorage.setItem('user', JSON.stringify(user))
+
+        setIsLoading(false)
+        showToast('success', '✅ Google login successful!')
+        console.log('[Google] 🚀 Navigating to /modes')
+        navigate('/modes', { replace: true })
+      } else {
+        throw new Error('Invalid response from server')
+      }
+    } catch (error: any) {
+      console.error('[Google] ❌ Error:', error)
+      const message = error.response?.data?.message || error.message || 'Google login failed'
+      showToast('error', message)
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleError = () => {
+    console.error('[Google] ❌ Google sign-in failed')
+    showToast('error', 'Google login failed. Please try again.')
+  }
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!forgotEmail) {
       showToast('error', 'Please enter your email')
       return
     }
-    
+
     setIsResettingPassword(true)
     try {
       const response = await api.post('/auth/reset-password-request', {
         email: forgotEmail,
       })
-      
+
       if (response.data.success) {
         showToast('success', 'Password reset link sent to your email')
         setShowForgotPassword(false)
@@ -303,13 +347,10 @@ export default function LoginNew() {
 
                 <motion.div variants={itemVariants}>
                   <GoogleLogin
-                    onSuccess={(credentialResponse) => {
-                      // Handle Google login
-                      console.log('Google login:', credentialResponse)
-                    }}
-                    onError={() => console.log('Login Failed')}
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
                     text="signin_with"
-                    width="100%"
+                    theme="outline"
                   />
                 </motion.div>
 
