@@ -41,7 +41,7 @@ export default function InterviewAnalysis() {
   };
 
   const transformAnalysisData = (apiResponse: any) => {
-    const analysis = apiResponse?.data?.analysis || apiResponse?.analysis || {};
+    const analysis = apiResponse?.data?.data?.analysis || apiResponse?.data?.analysis || apiResponse?.analysis || {};
     return {
       deceptionScore: analysis?.credibility?.lie_probability || 0,
       credibilityScore: 100 - (analysis?.credibility?.lie_probability || 0),

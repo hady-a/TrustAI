@@ -39,7 +39,7 @@ export default function BusinessAnalysis() {
   const transformAnalysisData = (apiResponse: any) => {
     console.log('🔍 [transformAnalysisData] Raw API response:', JSON.stringify(apiResponse, null, 2));
 
-    const analysis = apiResponse?.data?.analysis || apiResponse?.analysis || {};
+    const analysis = apiResponse?.data?.data?.analysis || apiResponse?.data?.analysis || apiResponse?.analysis || {};
     console.log('🔍 [transformAnalysisData] Extracted analysis:', JSON.stringify(analysis, null, 2));
 
     const transformed = {
