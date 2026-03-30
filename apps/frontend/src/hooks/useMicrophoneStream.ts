@@ -16,6 +16,7 @@ interface WebSocketMessage {
   clientId?: string;
   chunkNumber?: number;
   bufferedChunks?: number;
+  isProcessing?: boolean;
   result?: any;
   message?: string;
   details?: string;
@@ -36,7 +37,6 @@ export function useMicrophoneStream(wsUrl: string = 'ws://localhost:8080') {
 
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -89,6 +89,53 @@ export function useMicrophoneStream(wsUrl: string = 'ws://localhost:8080') {
                   bufferedChunks: message.bufferedChunks || 0,
                 };
               });
+              break;
+
+            // Handle live analysis updates during processing
+            case 'live_analysis':
+            case 'progress_update':
+            case 'analysis_progress':
+              console.log('📊 Live analysis update received:', message);
+              console.log('   Update type:', message.type);
+              console.log('   Partial result:', message.result);
+
+              if (message.result) {
+                // Transform partial result data
+                const partialData = message.result;
+                const partialTransformed = {
+                  deceptionScore: partialData?.credibility?.lie_probability || 0,
+                  credibilityScore: 100 - (partialData?.credibility?.lie_probability || 0),
+                  confidence: (partialData?.credibility?.confidence || 0) / 100,
+                  metrics: {
+                    lie_probability: partialData?.credibility?.lie_probability,
+                    credibility_confidence: partialData?.credibility?.confidence,
+                    voice_stress: partialData?.voice?.stress?.stress_level,
+                    voice_emotion: partialData?.voice?.emotion?.emotion,
+                    transcription: partialData?.voice?.transcription?.transcript || '(Processing...)',
+                  },
+                  insights: [
+                    partialData?.credibility?.analysis || 'Analyzing deception indicators',
+                    `Voice emotion: ${partialData?.voice?.emotion?.emotion || 'Detecting...'}`,
+                    `Stress level: ${partialData?.voice?.stress?.stress_level || 0}/100`,
+                  ],
+                };
+
+                console.log('   Transformed partial data:', partialTransformed);
+
+                setState((prev) => {
+                  const newState = {
+                    ...prev,
+                    isAnalyzing: true,
+                    liveResult: {
+                      timestamp: message.timestamp || new Date().toISOString(),
+                      status: 'processing' as const,
+                      data: partialTransformed,
+                    },
+                  };
+                  console.log('  → Updating state with live progress:', newState.liveResult);
+                  return newState;
+                });
+              }
               break;
 
             case 'analysis_complete':

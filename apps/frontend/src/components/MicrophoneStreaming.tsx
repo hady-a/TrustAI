@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, AlertCircle, CheckCircle, Play, Square, Send, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle, Play, Square, Send, RotateCcw } from 'lucide-react';
 import { useMicrophoneStream } from '../hooks/useMicrophoneStream';
 
 interface MicrophoneStreamingProps {
@@ -16,12 +16,11 @@ interface LiveResult {
 }
 
 export default function MicrophoneStreaming({ onAnalysisComplete, wsUrl = 'ws://localhost:8080' }: MicrophoneStreamingProps) {
-  const { state, connect, startRecording, stopRecording, analyzeBuffer, clearBuffer, disconnect, getStatus } =
+  const { state, connect, startRecording, stopRecording, analyzeBuffer, clearBuffer, disconnect } =
     useMicrophoneStream(wsUrl);
 
   const [micLevel, setMicLevel] = useState(0);
   const [liveResults, setLiveResults] = useState<LiveResult | null>(null);
-  const [resultHistory, setResultHistory] = useState<LiveResult[]>([]);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -36,7 +35,6 @@ export default function MicrophoneStreaming({ onAnalysisComplete, wsUrl = 'ws://
       };
 
       setLiveResults(newResult);
-      setResultHistory((prev) => [...prev, newResult].slice(-10)); // Keep last 10 results
       console.log('Live result update:', newResult);
     }
   }, [state.liveResult]);
@@ -230,6 +228,106 @@ export default function MicrophoneStreaming({ onAnalysisComplete, wsUrl = 'ws://
           ))}
         </div>
       </motion.div>
+
+      {/* Live Results Display */}
+      <AnimatePresence>
+        {liveResults && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className={`p-6 rounded-xl border ${
+              liveResults.status === 'processing'
+                ? 'bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-800'
+                : liveResults.status === 'complete'
+                ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800'
+                : 'bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-800'
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <motion.div
+                animate={
+                  liveResults.status === 'processing'
+                    ? { scale: [1, 1.1, 1], opacity: [0.7, 1, 0.7] }
+                    : {}
+                }
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                {liveResults.status === 'processing' && (
+                  <div className="w-6 h-6 border-3 border-blue-600 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
+                )}
+                {liveResults.status === 'complete' && (
+                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                )}
+                {liveResults.status === 'error' && (
+                  <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                )}
+              </motion.div>
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-semibold mb-2 ${
+                  liveResults.status === 'processing'
+                    ? 'text-blue-900 dark:text-blue-300'
+                    : liveResults.status === 'complete'
+                    ? 'text-green-900 dark:text-green-300'
+                    : 'text-red-900 dark:text-red-300'
+                }`}>
+                  {liveResults.status === 'processing'
+                    ? 'Analysis In Progress'
+                    : liveResults.status === 'complete'
+                    ? 'Analysis Complete'
+                    : 'Analysis Error'}
+                </h3>
+                {liveResults.data && (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Deception Score:</span>
+                      <span className={`font-bold ${
+                        liveResults.data.deceptionScore > 70
+                          ? 'text-red-600 dark:text-red-400'
+                          : liveResults.data.deceptionScore > 40
+                          ? 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-green-600 dark:text-green-400'
+                      }`}>
+                        {(liveResults.data.deceptionScore || 0).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Credibility:</span>
+                      <span className="font-bold text-blue-600 dark:text-blue-400">
+                        {(liveResults.data.credibilityScore || 0).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Confidence:</span>
+                      <span className="font-bold text-purple-600 dark:text-purple-400">
+                        {((liveResults.data.confidence || 0) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    {liveResults.data.metrics?.transcription && (
+                      <div className="mt-3 p-2 bg-black/5 dark:bg-black/20 rounded text-gray-700 dark:text-gray-300">
+                        <p className="text-xs font-semibold mb-1">Transcription:</p>
+                        <p className="text-xs italic">{liveResults.data.metrics.transcription}</p>
+                      </div>
+                    )}
+                    {liveResults.data.insights && Array.isArray(liveResults.data.insights) && (
+                      <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <p className="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-400">Insights:</p>
+                        <ul className="text-xs space-y-1">
+                          {liveResults.data.insights.map((insight: string, idx: number) => (
+                            <li key={idx} className="text-gray-600 dark:text-gray-400">
+                              • {insight}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Analysis Result */}
       <AnimatePresence>
