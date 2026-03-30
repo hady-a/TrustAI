@@ -96,6 +96,24 @@ export default function LiveAnalysisDisplay({
     }
   };
 
+  // Get risk level color coding
+  const getRiskLevelColor = (score: number) => {
+    if (score >= 75) return { bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-300 dark:border-red-700', text: 'text-red-700 dark:text-red-300', label: 'Critical' };
+    if (score >= 50) return { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-300 dark:border-orange-700', text: 'text-orange-700 dark:text-orange-300', label: 'High' };
+    if (score >= 25) return { bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-300 dark:border-yellow-700', text: 'text-yellow-700 dark:text-yellow-300', label: 'Medium' };
+    return { bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-300 dark:border-green-700', text: 'text-green-700 dark:text-green-300', label: 'Low' };
+  };
+
+  const getMetricColor = (value: string | number) => {
+    if (typeof value === 'number') {
+      if (value >= 75) return 'text-red-600 dark:text-red-400';
+      if (value >= 50) return 'text-orange-600 dark:text-orange-400';
+      if (value >= 25) return 'text-yellow-600 dark:text-yellow-400';
+      return 'text-green-600 dark:text-green-400';
+    }
+    return 'text-gray-600 dark:text-gray-400';
+  };
+
   // Guard: ensure result has valid data before rendering
   const hasValidData = result?.data && typeof result.data === 'object';
 
@@ -258,7 +276,146 @@ export default function LiveAnalysisDisplay({
         )}
       </AnimatePresence>
 
-      {/* Insights */}
+      {/* Analysis Cards Section */}
+      <AnimatePresence>
+        {result && hasValidData && result.status === 'complete' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-4"
+          >
+            {/* Risk Level Card */}
+            {result.data?.deceptionScore !== undefined && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`p-6 rounded-xl border-2 shadow-md ${getRiskLevelColor(result.data.deceptionScore).bg} ${getRiskLevelColor(result.data.deceptionScore).border}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">Risk Assessment</p>
+                    <p className={`text-2xl font-bold ${getRiskLevelColor(result.data.deceptionScore).text}`}>
+                      {getRiskLevelColor(result.data.deceptionScore).label}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Deception Score</p>
+                    <p className={`text-3xl font-bold ${getScoreColor(result.data.deceptionScore)}`}>
+                      {Math.round(result.data.deceptionScore)}%
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Analysis Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Transcript Card */}
+              {result.data?.metrics?.transcription && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">📝 Transcript</h5>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
+                    {result.data.metrics.transcription || '(No transcription available)'}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Emotion Card */}
+              {result.data?.metrics?.voice_emotion && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">😊 Emotion</h5>
+                  <p className={`text-lg font-bold ${getMetricColor(result.data.metrics.voice_emotion)}`}>
+                    {result.data.metrics.voice_emotion || 'N/A'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Detected emotion from voice</p>
+                </motion.div>
+              )}
+
+              {/* Stress Level Card */}
+              {result.data?.metrics?.voice_stress !== undefined && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">⚡ Stress Level</h5>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min((result.data.metrics.voice_stress as number) || 0, 100)}%` }}
+                          transition={{ duration: 1 }}
+                          className="h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500"
+                        />
+                      </div>
+                    </div>
+                    <p className={`text-lg font-bold min-w-fit ${getMetricColor(result.data.metrics.voice_stress)}`}>
+                      {typeof result.data.metrics.voice_stress === 'number' ? `${Math.round(result.data.metrics.voice_stress)}%` : result.data.metrics.voice_stress}
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Credibility Card */}
+              {result.data?.credibilityScore !== undefined && result.data?.deceptionScore !== undefined && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.25 }}
+                  className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">✓ Credibility</h5>
+                  <p className={`text-2xl font-bold ${getScoreColor(100 - (result.data.deceptionScore || 0))}`}>
+                    {Math.round(result.data.credibilityScore)}%
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Overall credibility assessment</p>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Confidence Report */}
+            {result.data?.confidence !== undefined && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm"
+                >
+                  <h5 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">📊 Model Confidence Report</h5>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="w-full h-3 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(result.data.confidence * 100) || 0}%` }}
+                          transition={{ duration: 1.2 }}
+                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold text-blue-700 dark:text-blue-300 min-w-fit">
+                      {Math.round((result.data.confidence || 0) * 100)}%
+                    </p>
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">Confidence in analysis accuracy</p>
+                </motion.div>
+              )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {result?.data?.insights && Array.isArray(result.data.insights) && result.data.insights.length > 0 && (
           <motion.div
