@@ -2,10 +2,21 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
-import LiveCapture from "../components/LiveCapture";
+import InterviewLiveForm from "../components/InterviewLiveForm";
 import FileUploader from "../components/FileUploader";
 import ProgressBar from "../components/ProgressBar";
+import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay";
 import { analysisAPI } from "../lib/api";
+
+interface InterviewResponse {
+  questionIndex: number;
+  questionText: string;
+  answerText: string;
+  answerVoice: boolean;
+  audioBlob?: Blob;
+  recordedAt: number;
+  duration?: number;
+}
 
 export default function BusinessAnalysis() {
   const navigate = useNavigate();
@@ -16,6 +27,7 @@ export default function BusinessAnalysis() {
   const [error, setError] = useState<string>("");
   const [analysisId, setAnalysisId] = useState<string>("");
   const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [liveResult, setLiveResult] = useState<any | null>(null);
 
   const handleInputMethodSelect = (method: "live" | "upload") => {
     setInputMethod(method);
@@ -23,41 +35,86 @@ export default function BusinessAnalysis() {
     setSelectedFile(null);
   };
 
+  // Transform API response to LiveAnalysisDisplay format
+  const transformAnalysisData = (apiResponse: any) => {
+    console.log('🔍 [transformAnalysisData] Raw API response:', JSON.stringify(apiResponse, null, 2));
+
+    const analysis = apiResponse?.data?.analysis || apiResponse?.analysis || {};
+    console.log('🔍 [transformAnalysisData] Extracted analysis:', JSON.stringify(analysis, null, 2));
+
+    const transformed = {
+      deceptionScore: analysis?.credibility?.lie_probability || 0,
+      credibilityScore: 100 - (analysis?.credibility?.lie_probability || 0),
+      confidence: (analysis?.credibility?.confidence || 0) / 100,
+      metrics: {
+        lie_probability: analysis?.credibility?.lie_probability,
+        credibility_confidence: analysis?.credibility?.confidence,
+        voice_stress: analysis?.voice?.stress?.stress_level,
+        voice_emotion: analysis?.voice?.emotion?.emotion,
+        transcription: analysis?.voice?.transcription?.transcript || '(No data)',
+      },
+      insights: [
+        analysis?.credibility?.analysis || 'Analysis complete',
+        `Voice emotion: ${analysis?.voice?.emotion?.emotion || 'Unknown'}`,
+        `Stress level: ${analysis?.voice?.stress?.stress_level || 0}/100`,
+      ],
+    };
+    console.log('✅ [transformAnalysisData] Transformed data:', JSON.stringify(transformed, null, 2));
+    return transformed;
+  };
+
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
     setError("");
   };
 
-  const handleLiveAnalysis = async (videoBlob: Blob, audioBlob: Blob) => {
+  const handleLiveAnalysis = async (videoBlob: Blob, audioBlob: Blob, answers: InterviewResponse[]) => {
     setIsAnalyzing(true);
     setProgress(0);
     setError("");
 
     try {
       const formData = new FormData();
-      formData.append("video", videoBlob, `business-video-${Date.now()}.webm`);
       formData.append("audio", audioBlob, `business-audio-${Date.now()}.wav`);
-      formData.append("mode", "business");
+      formData.append("image", videoBlob, `business-video-${Date.now()}.webm`);
+
+      // Add answers as JSON
+      formData.append("answers", JSON.stringify(answers));
 
       const progressInterval = setInterval(() => {
         setProgress((p) => Math.min(p + Math.random() * 20, 95));
       }, 500);
 
-      const response = await analysisAPI.post<any>("/analysis/live", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      console.log('📁 [handleLiveAnalysis] Sending analysis request to Flask API /analyze/business');
+      // Call Flask API directly on port 8000
+      const response = await fetch('http://localhost:8000/analyze/business', {
+        method: 'POST',
+        body: formData,
+      }).then(r => r.json()).then(data => ({ data }));
 
-      if (response.data.success && response.data.data?.id) {
-        setAnalysisId(response.data.data.id);
+      if (response.data?.success && response.data?.data) {
+        console.log('✅ [handleLiveAnalysis] Success response received:', response.data);
+        setAnalysisId(response.data.data.id || `business-${Date.now()}`);
         setProgress(100);
+
+        // Set live result for display
+        const transformedData = transformAnalysisData(response.data.data);
+        console.log('📊 [handleLiveAnalysis] Setting liveResult with transformed data:', transformedData);
+        setLiveResult({
+          timestamp: new Date().toISOString(),
+          status: 'complete',
+          data: transformedData,
+        });
       } else {
-        setError(response.data.error || "Analysis failed");
+        console.error('❌ [handleLiveAnalysis] Analysis failed:', response.data);
+        setError(response.data?.error || "Analysis failed");
       }
-      
+
       clearInterval(progressInterval);
-      setTimeout(() => setAnalysisComplete(true), 600);
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        setAnalysisComplete(true);
+      }, 600);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
       setIsAnalyzing(false);
@@ -81,15 +138,32 @@ export default function BusinessAnalysis() {
 
     try {
       const fileUrl = URL.createObjectURL(selectedFile);
+      console.log('📁 [handleFileAnalysis] Sending analysis request with fileUrl:', fileUrl);
       const response = await analysisAPI.create({ fileUrl, modes: ["BUSINESS"] });
+      console.log('✅ [handleFileAnalysis] Response received:', response.data);
+
       const newAnalysisId = response.data.data.id;
       setAnalysisId(newAnalysisId);
 
+      // Set live result for display
+      const transformedData = transformAnalysisData(response.data.data);
+      console.log('📊 [handleFileAnalysis] Setting liveResult with transformed data:', transformedData);
+      setLiveResult({
+        timestamp: new Date().toISOString(),
+        status: 'complete',
+        data: transformedData,
+      });
+
       setProgress(100);
       clearInterval(progressInterval);
-      setTimeout(() => setAnalysisComplete(true), 600);
+      console.log('⏱️ [handleFileAnalysis] Setting analysisComplete to true after 600ms');
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        setAnalysisComplete(true);
+      }, 600);
     } catch (err) {
       clearInterval(progressInterval);
+      console.error('❌ [handleFileAnalysis] Error:', err);
       setError(err instanceof Error ? err.message : "Analysis failed");
       setIsAnalyzing(false);
       setProgress(0);
@@ -165,7 +239,7 @@ export default function BusinessAnalysis() {
           />
         </div>
 
-        <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="relative z-10 max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -178,7 +252,7 @@ export default function BusinessAnalysis() {
               ← Change Input Method
             </button>
             <h2 className="text-4xl font-bold text-white">Live Business Analysis</h2>
-            <p className="text-gray-400 mt-2">Start recording to analyze business communication in real-time</p>
+            <p className="text-gray-400 mt-2">Answer the business questions in real-time</p>
           </motion.div>
 
           <motion.div
@@ -186,7 +260,7 @@ export default function BusinessAnalysis() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <LiveCapture
+            <InterviewLiveForm
               onAnalysisStart={handleLiveAnalysis}
               isAnalyzing={isAnalyzing}
               mode="Business Analysis"
@@ -343,7 +417,7 @@ export default function BusinessAnalysis() {
   // Show completion state
   if (analysisComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0B1628] via-[#0f2420] to-[#0B1628] relative overflow-hidden flex items-center justify-center py-20 px-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0B1628] via-[#0f2420] to-[#0B1628] relative overflow-hidden py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <motion.div
             animate={{ scale: [1, 1.2, 1] }}
@@ -352,32 +426,69 @@ export default function BusinessAnalysis() {
           />
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 max-w-2xl w-full text-center"
-        >
+        <div className="relative z-10 max-w-5xl mx-auto">
           <motion.div
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-            className="inline-block mb-8"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-12 text-center"
           >
-            <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-green-600/40 to-green-900/40 border-2 border-green-700 flex items-center justify-center text-6xl">
-              ✓
-            </div>
+            <motion.div
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+              className="inline-block mb-8"
+            >
+              <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-green-600/40 to-green-900/40 border-2 border-green-700 flex items-center justify-center text-6xl">
+                ✓
+              </div>
+            </motion.div>
+            <h2 className="text-5xl font-black text-white mb-3">ANALYSIS COMPLETE</h2>
+            <p className="text-gray-400 text-xl">Business intelligence insights are ready below</p>
           </motion.div>
-          <h2 className="text-5xl font-black text-white mb-3">ANALYSIS COMPLETE</h2>
-          <p className="text-gray-400 text-xl mb-10">Business intelligence insights are ready for review</p>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(`/analysis/business/result/${analysisId}`)}
-            className="px-12 py-4 bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-emerald-600/50 transition-all shadow-lg"
+
+          {/* Display Live Analysis Results */}
+          {liveResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="mb-12 p-8 bg-gray-900/50 border border-gray-800 rounded-xl"
+            >
+              <LiveAnalysisDisplay
+                result={liveResult}
+                isAnalyzing={false}
+              />
+            </motion.div>
+          )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            📊 VIEW RESULTS
-          </motion.button>
-        </motion.div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate(`/analysis/business/result/${analysisId}`)}
+              className="px-12 py-4 bg-gradient-to-r from-emerald-600 to-green-700 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-emerald-600/50 transition-all shadow-lg"
+            >
+              📊 VIEW FULL REPORT
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setAnalysisComplete(false);
+                setInputMethod(null);
+                setLiveResult(null);
+              }}
+              className="px-12 py-4 border-2 border-emerald-600 text-emerald-300 rounded-lg font-bold hover:bg-emerald-600/10 transition-all"
+            >
+              🔄 NEW ANALYSIS
+            </motion.button>
+          </motion.div>
+        </div>
       </div>
     );
   }

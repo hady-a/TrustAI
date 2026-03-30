@@ -13,6 +13,10 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from "recharts"
+import SystemHealthOrbital from "../../components/SystemHealthOrbital"
+import MetricsGauge from "../../components/MetricsGauge"
+import ParticleNetwork from "../../components/ParticleNetwork"
+import { BarChart3, Zap, Database } from "lucide-react"
 
 const QUICK_ACTIONS = [
     { label: "Export Users", icon: "📥", color: "from-blue-500 via-cyan-500 to-teal-500", action: "export_users" },
@@ -290,6 +294,11 @@ export default function AdminDashboard() {
     }
     return (
         <div className="min-h-screen bg-stone-50 dark:from-[#0B0F19] dark:via-[#1a1f3a] dark:to-[#0B0F19] dark:bg-gradient-to-br relative overflow-hidden pt-8 pb-12 px-6">
+            {/* Animated Particle Network Background */}
+            <div className="fixed inset-0 z-0 dark:opacity-100 opacity-40">
+                <ParticleNetwork />
+            </div>
+
             {/* Animated background elements */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
                 <motion.div
@@ -495,6 +504,62 @@ export default function AdminDashboard() {
                                 </motion.div>
                             </>
                         ) : null}
+                    </motion.div>
+
+                    {/* Premium System Health Orbital Visualization */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.5 }}
+                        className="mb-16"
+                    >
+                        <h3 className="text-2xl font-black text-white mb-8">System Health Orbital</h3>
+                        <div className="relative backdrop-blur-xl bg-gradient-to-br from-slate-900/50 to-slate-800/30 border border-white/10 rounded-3xl p-12 min-h-[600px] flex items-center justify-center overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-cyan-500/5" />
+                            <SystemHealthOrbital />
+                        </div>
+                    </motion.div>
+
+                    {/* Premium Metrics Gauges */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.55 }}
+                        className="mb-12"
+                    >
+                        <h3 className="text-2xl font-black text-white mb-6">Real-time Performance Metrics</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                            <MetricsGauge
+                                label="API Server"
+                                value={99.8}
+                                icon={<Zap className="w-5 h-5" />}
+                                color="blue"
+                            />
+                            <MetricsGauge
+                                label="Database"
+                                value={99.9}
+                                icon={<Database className="w-5 h-5" />}
+                                color="emerald"
+                            />
+                            <MetricsGauge
+                                label="Cache"
+                                value={87.5}
+                                icon={<BarChart3 className="w-5 h-5" />}
+                                color="purple"
+                            />
+                            <MetricsGauge
+                                label="Queue"
+                                value={100}
+                                icon={<Zap className="w-5 h-5" />}
+                                color="pink"
+                            />
+                            <MetricsGauge
+                                label="Storage"
+                                value={95.2}
+                                icon={<Database className="w-5 h-5" />}
+                                color="orange"
+                            />
+                        </div>
                     </motion.div>
 
                     {/* Quick Actions Grid */}

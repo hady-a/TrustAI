@@ -22,6 +22,8 @@ import { setupSwagger } from './lib/swagger';
 import { generalLimiter } from './middleware/rateLimiter.middleware';
 import authRoutes from './routes/auth.routes';
 import analysisRoutes from './routes/analysis.routes';
+import businessAnalysisRoutes from './routes/business-analysis.routes';
+import analyzeRoutes from './routes/analyze.routes';
 import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
 import systemSettingsRoutes from './routes/systemSettings.routes';
@@ -179,8 +181,13 @@ app.post("/api/test/check-user", async (req: Request, res: Response) => {
 // API ROUTES
 // ============================================================================
 
+// Analyze routes (now under /api to match frontend baseURL)
+app.use('/api', analyzeRoutes);
+
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/analyses', analysisRoutes);
+app.use('/api/analysis/business', businessAnalysisRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', systemSettingsRoutes);

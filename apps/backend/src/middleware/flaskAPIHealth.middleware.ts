@@ -14,7 +14,7 @@ let flaskAPIHealthy = false;
  */
 export async function initializeFlaskConnection(): Promise<void> {
   try {
-    logger.info('Checking Flask AI API connection...');
+    logger.debug('Checking Flask AI API connection...');
     const isConnected = await aiAnalysisService.validateConnection();
 
     if (isConnected) {
@@ -22,13 +22,13 @@ export async function initializeFlaskConnection(): Promise<void> {
       logger.info('✅ Flask AI API is connected and healthy');
     } else {
       flaskAPIHealthy = false;
-      logger.warn('⚠️ Flask AI API is not available - continue with graceful degradation');
+      logger.debug('ℹ️ Flask AI API is not available - continuing with graceful degradation');
     }
   } catch (error) {
     flaskAPIHealthy = false;
-    logger.error(
-      { error },
-      '⚠️ Failed to connect to Flask AI API - continue with graceful degradation'
+    logger.debug(
+      { error: (error as Error).message },
+      'ℹ️ Flask AI API connection check - not available yet (this is normal if Flask hasn\'t started)'
     );
   }
 }

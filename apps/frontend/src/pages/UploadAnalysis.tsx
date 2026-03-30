@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import FileUploader from "../components/FileUploader"
 import ProgressBar from "../components/ProgressBar"
+import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay"
 import { analysisAPI } from "../lib/api"
 import { AxiosError } from "axios"
 
@@ -13,12 +14,35 @@ export default function UploadAnalysis() {
   const [progress, setProgress] = useState(0)
   const [analysisComplete, setAnalysisComplete] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [liveResult, setLiveResult] = useState<any | null>(null)
+  const [_analysisId, setAnalysisId] = useState<string>("")
   const selectedMode = sessionStorage.getItem("selectedMode") || "Unknown"
   const selectedModeValue = sessionStorage.getItem("selectedModeValue") || "CRIMINAL"
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file)
     setError(null)
+  }
+
+  const transformAnalysisData = (apiResponse: any) => {
+    const analysis = apiResponse?.data?.analysis || apiResponse?.analysis || {}
+    return {
+      deceptionScore: analysis?.credibility?.lie_probability || 0,
+      credibilityScore: 100 - (analysis?.credibility?.lie_probability || 0),
+      confidence: (analysis?.credibility?.confidence || 0) / 100,
+      metrics: {
+        lie_probability: analysis?.credibility?.lie_probability,
+        credibility_confidence: analysis?.credibility?.confidence,
+        voice_stress: analysis?.voice?.stress?.stress_level,
+        voice_emotion: analysis?.voice?.emotion?.emotion,
+        transcription: analysis?.voice?.transcription?.transcript || '(No data)',
+      },
+      insights: [
+        analysis?.credibility?.analysis || 'Analysis complete',
+        `Voice emotion: ${analysis?.voice?.emotion?.emotion || 'Unknown'}`,
+        `Stress level: ${analysis?.voice?.stress?.stress_level || 0}/100`,
+      ],
+    }
   }
 
   const startAnalysis = async () => {
@@ -32,23 +56,32 @@ export default function UploadAnalysis() {
     try {
       // In a real app, you'd upload the file first and get a fileUrl
       // For now, using a placeholder URL
-      await analysisAPI.create({
+      const response = await analysisAPI.create({
         fileUrl: `file:///${selectedFile.name}`,
         modes: [selectedModeValue],
       })
 
-      // Simulate progress
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval)
-            setIsAnalyzing(false)
-            setAnalysisComplete(true)
-            return 100
-          }
-          return prev + Math.random() * 30
+      // Extract analysis ID and transform data
+      if (response.data.success && response.data.data?.id) {
+        setAnalysisId(response.data.data.id)
+
+        // Set live result for display
+        const transformedData = transformAnalysisData(response.data.data)
+        setLiveResult({
+          timestamp: new Date().toISOString(),
+          status: 'complete',
+          data: transformedData,
         })
-      }, 300)
+
+        setProgress(100)
+        setTimeout(() => {
+          setIsAnalyzing(false)
+          setAnalysisComplete(true)
+        }, 600)
+      } else {
+        setError(response.data.error || "Analysis failed")
+        setIsAnalyzing(false)
+      }
     } catch (err) {
       const axiosError = err as AxiosError<{ message: string }>
       const message =
@@ -74,7 +107,7 @@ export default function UploadAnalysis() {
           className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"
         />
       </div>
-      
+
       <div className="relative z-10 max-w-5xl mx-auto px-6 py-16">
         {/* Header */}
         <motion.div
@@ -275,8 +308,9 @@ export default function UploadAnalysis() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, type: "spring" }}
-            className="max-w-2xl mx-auto"
+            className="max-w-4xl mx-auto"
           >
+            {/* Header */}
             <div className="text-center mb-12">
               {/* Success badge */}
               <motion.div
@@ -305,19 +339,58 @@ export default function UploadAnalysis() {
               <p className="text-gray-400 text-lg mb-8">
                 Your file has been successfully analyzed with {selectedMode} mode
               </p>
+            </div>
 
+            {/* Live Analysis Display */}
+            {liveResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-12 p-8 bg-gray-900/50 border border-gray-800 rounded-xl"
+              >
+                <LiveAnalysisDisplay
+                  result={liveResult}
+                  isAnalyzing={false}
+                />
+              </motion.div>
+            )}
+
+            {/* Action Buttons */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="flex flex-col sm:flex-row gap-4 justify-center"
+            >
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => navigate("/modes")}
-                className="px-10 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:shadow-2xl hover:shadow-indigo-500/50 transition-all shadow-lg flex items-center justify-center gap-3 mx-auto"
+                className="px-10 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:shadow-2xl hover:shadow-indigo-500/50 transition-all shadow-lg flex items-center justify-center gap-3"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 01-2 2h-2a2 2 0 01-2-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
                 Try Another Analysis
               </motion.button>
-            </div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  setAnalysisComplete(false)
+                  setLiveResult(null)
+                  setSelectedFile(null)
+                  setProgress(0)
+                  setError(null)
+                }}
+                className="px-10 py-4 border-2 border-indigo-600 text-indigo-400 rounded-xl font-semibold hover:bg-indigo-900/20 transition-all flex items-center justify-center gap-3"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Upload Another File
+              </motion.button>
+            </motion.div>
           </motion.div>
         )}
       </div>

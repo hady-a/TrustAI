@@ -2,22 +2,23 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
-import LiveCapture from "../components/LiveCapture";
 import FileUploader from "../components/FileUploader";
 import ProgressBar from "../components/ProgressBar";
+import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay";
 import { analysisAPI } from "../lib/api";
 
 export default function CriminalAnalysis() {
   const navigate = useNavigate();
-  const [inputMethod, setInputMethod] = useState<"live" | "upload" | null>(null);
+  const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string>("");
   const [analysisId, setAnalysisId] = useState<string>("");
   const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [liveResult, setLiveResult] = useState<any | null>(null);
 
-  const handleInputMethodSelect = (method: "live" | "upload") => {
+  const handleInputMethodSelect = (method: "upload") => {
     setInputMethod(method);
     setError("");
     setSelectedFile(null);
@@ -28,41 +29,26 @@ export default function CriminalAnalysis() {
     setError("");
   };
 
-  const handleLiveAnalysis = async (videoBlob: Blob, audioBlob: Blob) => {
-    setIsAnalyzing(true);
-    setProgress(0);
-    setError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("video", videoBlob, `criminal-video-${Date.now()}.webm`);
-      formData.append("audio", audioBlob, `criminal-audio-${Date.now()}.wav`);
-      formData.append("mode", "investigation");
-
-      const progressInterval = setInterval(() => {
-        setProgress((p) => Math.min(p + Math.random() * 20, 95));
-      }, 500);
-
-      const response = await analysisAPI.post<any>("/analysis/live", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      if (response.data.success && response.data.data?.id) {
-        setAnalysisId(response.data.data.id);
-        setProgress(100);
-      } else {
-        setError(response.data.error || "Analysis failed");
-      }
-      
-      clearInterval(progressInterval);
-      setTimeout(() => setAnalysisComplete(true), 600);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed");
-      setIsAnalyzing(false);
-      setProgress(0);
-    }
+  // Transform API response to LiveAnalysisDisplay format
+  const transformAnalysisData = (apiResponse: any) => {
+    const analysis = apiResponse?.data?.analysis || apiResponse?.analysis || {};
+    return {
+      deceptionScore: analysis?.credibility?.lie_probability || 0,
+      credibilityScore: 100 - (analysis?.credibility?.lie_probability || 0),
+      confidence: (analysis?.credibility?.confidence || 0) / 100,
+      metrics: {
+        lie_probability: analysis?.credibility?.lie_probability,
+        credibility_confidence: analysis?.credibility?.confidence,
+        voice_stress: analysis?.voice?.stress?.stress_level,
+        voice_emotion: analysis?.voice?.emotion?.emotion,
+        transcription: analysis?.voice?.transcription?.transcript || '(No data)',
+      },
+      insights: [
+        analysis?.credibility?.analysis || 'Analysis complete',
+        `Voice emotion: ${analysis?.voice?.emotion?.emotion || 'Unknown'}`,
+        `Stress level: ${analysis?.voice?.stress?.stress_level || 0}/100`,
+      ],
+    };
   };
 
   const handleFileAnalysis = async () => {
@@ -85,9 +71,20 @@ export default function CriminalAnalysis() {
       const newAnalysisId = response.data.data.id;
       setAnalysisId(newAnalysisId);
 
+      // Set live result for display
+      const transformedData = transformAnalysisData(response.data.data);
+      setLiveResult({
+        timestamp: new Date().toISOString(),
+        status: 'complete',
+        data: transformedData,
+      });
+
       setProgress(100);
       clearInterval(progressInterval);
-      setTimeout(() => setAnalysisComplete(true), 600);
+      setTimeout(() => {
+        setIsAnalyzing(false);
+        setAnalysisComplete(true);
+      }, 600);
     } catch (err) {
       clearInterval(progressInterval);
       setError(err instanceof Error ? err.message : "Analysis failed");
@@ -148,50 +145,6 @@ export default function CriminalAnalysis() {
           >
             ← Back
           </motion.button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show live capture
-  if (inputMethod === "live" && !isAnalyzing && !analysisComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-20 px-6">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ scale: [1, 1.2, 1] }}
-            transition={{ duration: 4, repeat: Infinity }}
-            className="absolute top-1/4 -left-20 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"
-          />
-        </div>
-
-        <div className="relative z-10 max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
-            <button
-              onClick={() => setInputMethod(null)}
-              className="text-gray-400 hover:text-gray-300 font-semibold flex items-center gap-2 mb-6"
-            >
-              ← Change Input Method
-            </button>
-            <h2 className="text-4xl font-bold text-white">Live Investigation Analysis</h2>
-            <p className="text-gray-400 mt-2">Start recording to analyze investigation subjects in real-time</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <LiveCapture
-              onAnalysisStart={handleLiveAnalysis}
-              isAnalyzing={isAnalyzing}
-              mode="Criminal Investigation"
-            />
-          </motion.div>
         </div>
       </div>
     );
@@ -343,7 +296,7 @@ export default function CriminalAnalysis() {
   // Show completion state
   if (analysisComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden flex items-center justify-center py-20 px-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <motion.div
             animate={{ scale: [1, 1.2, 1] }}
@@ -352,32 +305,69 @@ export default function CriminalAnalysis() {
           />
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 max-w-2xl w-full text-center"
-        >
+        <div className="relative z-10 max-w-5xl mx-auto">
           <motion.div
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-            className="inline-block mb-8"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-12 text-center"
           >
-            <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-green-600/40 to-green-900/40 border-2 border-green-700 flex items-center justify-center text-6xl">
-              ✓
-            </div>
+            <motion.div
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+              className="inline-block mb-8"
+            >
+              <div className="w-28 h-28 rounded-lg bg-gradient-to-br from-green-600/40 to-green-900/40 border-2 border-green-700 flex items-center justify-center text-6xl">
+                ✓
+              </div>
+            </motion.div>
+            <h2 className="text-5xl font-black text-white mb-3">CASE CLOSED</h2>
+            <p className="text-gray-400 text-xl">Evidence processed and analyzed successfully</p>
           </motion.div>
-          <h2 className="text-5xl font-black text-white mb-3">CASE CLOSED</h2>
-          <p className="text-gray-400 text-xl mb-10">Evidence processed and analyzed successfully</p>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(`/analysis/criminal/result/${analysisId}`)}
-            className="px-12 py-4 bg-gradient-to-r from-red-700 to-red-900 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-red-600/50 transition-all shadow-lg"
+
+          {/* Display Live Analysis Results */}
+          {liveResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="mb-12 p-8 bg-gray-900/50 border border-gray-800 rounded-xl"
+            >
+              <LiveAnalysisDisplay
+                result={liveResult}
+                isAnalyzing={false}
+              />
+            </motion.div>
+          )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            📊 VIEW RESULTS
-          </motion.button>
-        </motion.div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate(`/analysis/criminal/result/${analysisId}`)}
+              className="px-12 py-4 bg-gradient-to-r from-red-700 to-red-900 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-red-600/50 transition-all shadow-lg"
+            >
+              📊 VIEW FULL REPORT
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setAnalysisComplete(false);
+                setInputMethod(null);
+                setLiveResult(null);
+              }}
+              className="px-12 py-4 border-2 border-red-700 text-red-300 rounded-lg font-bold hover:bg-red-700/10 transition-all"
+            >
+              🔄 NEW ANALYSIS
+            </motion.button>
+          </motion.div>
+        </div>
       </div>
     );
   }

@@ -1,0 +1,21 @@
+{
+  "name": "trustai-dev",
+  "version": "1.0.0",
+  "description": "TrustAI - Multi-server development environment",
+  "scripts": {
+    "dev": "concurrently \"npm run frontend\" \"npm run backend\" \"npm run websocket\" \"npm run flask\"",
+    "frontend": "cd apps/frontend && npm run dev",
+    "backend": "cd apps/backend && npm run dev",
+    "websocket": "cd apps/backend && node websocket-server.js",
+    "flask": "cd 'trust ai system' && python3 flask_api.py",
+    "stop": "echo 'Use Ctrl+C to stop all servers'",
+    "dev:frontend": "cd apps/frontend && npm run dev",
+    "dev:backend": "cd apps/backend && npm run dev"
+  },
+  "keywords": ["trustai", "deception-detection", "interview-analysis"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

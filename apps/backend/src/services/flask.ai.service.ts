@@ -54,7 +54,7 @@ class FlaskAIService {
   private maxRetries: number;
 
   constructor() {
-    this.baseURL = process.env.FLASK_API_URL || 'http://localhost:5000';
+    this.baseURL = process.env.FLASK_API_URL || 'http://localhost:8000';
     this.timeout = parseInt(process.env.FLASK_TIMEOUT || '60000'); // 60 seconds
     this.maxRetries = parseInt(process.env.FLASK_MAX_RETRIES || '3');
 
@@ -118,15 +118,27 @@ class FlaskAIService {
    * Used to verify connection before processing
    */
   async healthCheck(): Promise<boolean> {
-    try {
-      const response = await this.client.get('/health', { timeout: 5000 });
-      return response.status === 200;
-    } catch (error) {
-      logger.warn('Flask API health check failed');
-      return false;
-    }
-  }
+  try {
+    const response = await this.client.get('/health', { timeout: 5000 });
 
+    const isHealthy =
+      response.status === 200 &&
+      response.data?.success === true &&
+      response.data?.data?.status === 'healthy';
+
+    if (!isHealthy) {
+      logger.warn(
+        { response: response.data },
+        'Flask health check returned unexpected format'
+      );
+    }
+
+    return isHealthy;
+  } catch (error) {
+    logger.warn('Flask API health check failed');
+    return false;
+  }
+}
   /**
    * Analyze audio, image, and text with retry logic
    * Supports exponential backoff for transient failures
@@ -180,7 +192,7 @@ class FlaskAIService {
 
       // POST to Flask API with form data
       const response = await this.client.post<AIAnalysisResult>(
-        '/analyze',
+        '/analyze/business',
         formData,
         {
           headers: formData.getHeaders(),
@@ -236,6 +248,13 @@ class FlaskAIService {
       }
 
       // Non-retryable error
+      console.error('🔥 FULL AXIOS ERROR:', {
+        message: err.message,
+        code: err.code,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+
       logError(error as Error, {
         context: 'FlaskAIService.analyze',
         mode: request.mode,
@@ -250,7 +269,7 @@ class FlaskAIService {
         agreementProbability: 0,
         prediction: 'ERROR',
         processingTime,
-        error: err.message || 'Unknown error during analysis',
+        error: JSON.stringify(err.response?.data || err.message),
       };
     }
   }

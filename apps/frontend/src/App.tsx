@@ -12,25 +12,26 @@ import KeyboardShortcutsHelp from "./components/KeyboardShortcutsHelp"
 import OnboardingTutorial from "./components/OnboardingTutorial"
 import PWAUpdateNotif from "./components/PWAUpdateNotif"
 import OfflineIndicator from "./components/OfflineIndicator"
-import Login from "./pages/Login"
-import Signup from "./pages/Signup"
 import UserProfile from "./pages/UserProfile"
-import ModeSelection from "./pages/ModeSelection"
 import UploadAnalysis from "./pages/UploadAnalysis"
 import CriminalAnalysis from "./pages/CriminalAnalysis"
 import InterviewAnalysis from "./pages/InterviewAnalysis"
 import BusinessAnalysis from "./pages/BusinessAnalysis"
+import MicrophoneStream from "./pages/MicrophoneStream"
 import ResultsPage from "./pages/ResultsPage"
 import Help from "./pages/Help"
 import AdvancedFeaturesDemo from "./pages/AdvancedFeaturesDemo"
 import MainLayout from "./layouts/MainLayout"
 import PublicLayout from "./layouts/PublicLayout"
 import AdminLayout from "./layouts/AdminLayout"
-import AdminDashboard from "./pages/admin/AdminDashboard"
+import AdminDashboardNew from "./pages/admin/AdminDashboardNew"
 import AdminUsers from "./pages/admin/AdminUsers"
 import AdminLogs from "./pages/admin/AdminLogs"
 import AdminBackups from "./pages/admin/AdminBackups"
 import AdminSettings from "./pages/admin/AdminSettings"
+import LoginNew from "./pages/LoginNew"
+import SignupNew from "./pages/SignupNew"
+import ModeSelectionNew from "./pages/ModeSelectionNew"
 
 function AppRoutes() {
   useSessionTimeout()
@@ -46,23 +47,24 @@ function AppRoutes() {
       <OfflineIndicator />
       <Routes>
         {/* Admin Routes */}
-        <Route path="/admin" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+        <Route path="/admin" element={<AdminLayout><AdminDashboardNew /></AdminLayout>} />
         <Route path="/admin/users" element={<AdminLayout><AdminUsers /></AdminLayout>} />
         <Route path="/admin/logs" element={<AdminLayout><AdminLogs /></AdminLayout>} />
         <Route path="/admin/backups" element={<AdminLayout><AdminBackups /></AdminLayout>} />
         <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
 
         {/* Public Routes - No Navbar */}
-        <Route path="/login" element={<PublicLayout><Login /></PublicLayout>} />
-        <Route path="/signup" element={<PublicLayout><Signup /></PublicLayout>} />
+        <Route path="/login" element={<PublicLayout><LoginNew /></PublicLayout>} />
+        <Route path="/signup" element={<PublicLayout><SignupNew /></PublicLayout>} />
 
         {/* Authenticated Routes with Navbar */}
         <Route path="/profile" element={<MainLayout><UserProfile /></MainLayout>} />
-        <Route path="/modes" element={<MainLayout><ModeSelection /></MainLayout>} />
+        <Route path="/modes" element={<MainLayout><ModeSelectionNew /></MainLayout>} />
         <Route path="/upload" element={<MainLayout><UploadAnalysis /></MainLayout>} />
         <Route path="/analysis/criminal" element={<MainLayout><CriminalAnalysis /></MainLayout>} />
         <Route path="/analysis/interview" element={<MainLayout><InterviewAnalysis /></MainLayout>} />
         <Route path="/analysis/business" element={<MainLayout><BusinessAnalysis /></MainLayout>} />
+        <Route path="/microphone" element={<MainLayout><MicrophoneStream /></MainLayout>} />
         
         {/* Results Pages */}
         <Route path="/analysis/business/result/:id" element={<MainLayout><ResultsPage mode="BUSINESS" /></MainLayout>} />

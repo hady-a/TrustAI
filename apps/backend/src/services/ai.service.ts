@@ -58,10 +58,13 @@ export class AIAnalysisService {
   async healthCheck(): Promise<boolean> {
     try {
       const response = await this.client.get('/health');
-      logger.info({ status: response.status }, 'Flask API health check passed');
+      logger.debug({ status: response.status }, 'Flask API health check passed');
       return response.status === 200;
     } catch (error) {
-      logger.error({ error }, 'Flask API health check failed');
+      logger.debug(
+        { message: (error as Error).message },
+        'Flask API health check - not available (expected if Flask is not running)'
+      );
       return false;
     }
   }
@@ -239,15 +242,18 @@ export class AIAnalysisService {
     try {
       const isHealthy = await this.healthCheck();
       if (!isHealthy) {
-        logger.error('Flask API is not healthy');
+        logger.debug('Flask API is not responding (this is normal if Flask is not started)');
         return false;
       }
 
       const status = await this.getStatus();
-      logger.info({ status }, 'Flask API connection validated');
+      logger.debug({ status }, 'Flask API connection validated');
       return true;
     } catch (error) {
-      logger.error({ error }, 'Flask API connection validation failed');
+      logger.debug(
+        { message: (error as Error).message },
+        'Flask API connection check - not available (expected if Flask is not running)'
+      );
       return false;
     }
   }

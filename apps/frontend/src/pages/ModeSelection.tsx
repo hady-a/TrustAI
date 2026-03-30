@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { ShieldAlert, UserCheck, Briefcase, ChevronRight } from "lucide-react"
+import ParticleNetwork from "../components/ParticleNetwork"
 
 export default function ModeSelection() {
   const navigate = useNavigate()
@@ -52,6 +53,11 @@ export default function ModeSelection() {
 
   return (
     <div className="min-h-screen bg-stone-50 dark:from-[#0B0F19] dark:via-[#1a1f3a] dark:to-[#0B0F19] dark:bg-gradient-to-br overflow-hidden relative flex flex-col">
+      {/* Animated Particle Network Background */}
+      <div className="fixed inset-0 z-0 dark:opacity-100 opacity-40">
+        <ParticleNetwork />
+      </div>
+
       {/* Animated background elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <motion.div
@@ -119,6 +125,9 @@ export default function ModeSelection() {
                   onMouseEnter={() => setHoveredMode(mode.value)}
                   onMouseLeave={() => setHoveredMode(null)}
                   className="relative h-full group"
+                  style={{
+                    perspective: "1200px",
+                  }}
                 >
                   {/* Glow background effect */}
                   <AnimatePresence>
