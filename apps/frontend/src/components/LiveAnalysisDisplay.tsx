@@ -174,7 +174,7 @@ export default function LiveAnalysisDisplay({
               whileHover={{ scale: 1.02 }}
             >
               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Deception Score</p>
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 mb-3">
                 <motion.span
                   className={`text-3xl font-bold ${getScoreColor(animatedScores.deception)}`}
                   key={`deception-${animatedScores.deception}`}
@@ -183,7 +183,16 @@ export default function LiveAnalysisDisplay({
                 </motion.span>
                 <span className="text-sm text-gray-600 dark:text-gray-400 mb-1">%</span>
               </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+              {/* Progress Bar */}
+              <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${animatedScores.deception}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-yellow-500 to-red-500"
+                />
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
                 {getScoreLabel('deception', animatedScores.deception)}
               </p>
             </motion.div>
@@ -194,7 +203,7 @@ export default function LiveAnalysisDisplay({
               whileHover={{ scale: 1.02 }}
             >
               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Credibility Score</p>
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 mb-3">
                 <motion.span
                   className={`text-3xl font-bold ${getScoreColor(100 - animatedScores.credibility)}`}
                   key={`credibility-${animatedScores.credibility}`}
@@ -203,7 +212,16 @@ export default function LiveAnalysisDisplay({
                 </motion.span>
                 <span className="text-sm text-gray-600 dark:text-gray-400 mb-1">%</span>
               </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+              {/* Progress Bar */}
+              <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${animatedScores.credibility}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-green-500 to-blue-500"
+                />
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
                 {getScoreLabel('credibility', animatedScores.credibility)}
               </p>
             </motion.div>
@@ -214,7 +232,7 @@ export default function LiveAnalysisDisplay({
               whileHover={{ scale: 1.02 }}
             >
               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Confidence</p>
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 mb-3">
                 <motion.span
                   className="text-3xl font-bold text-blue-600 dark:text-blue-400"
                   key={`confidence-${result?.data?.confidence}`}
@@ -222,6 +240,15 @@ export default function LiveAnalysisDisplay({
                   {Math.round(((result?.data?.confidence as number) ?? 0) * 100)}
                 </motion.span>
                 <span className="text-sm text-gray-600 dark:text-gray-400 mb-1">%</span>
+              </div>
+              {/* Progress Bar */}
+              <div className="w-full h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${((result?.data?.confidence as number) ?? 0) * 100}%` }}
+                  transition={{ duration: 1.2, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
+                />
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Model confidence</p>
             </motion.div>
@@ -292,7 +319,7 @@ export default function LiveAnalysisDisplay({
                 animate={{ opacity: 1, scale: 1 }}
                 className={`p-6 rounded-xl border-2 shadow-md ${getRiskLevelColor(result.data.deceptionScore).bg} ${getRiskLevelColor(result.data.deceptionScore).border}`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">Risk Assessment</p>
                     <p className={`text-2xl font-bold ${getRiskLevelColor(result.data.deceptionScore).text}`}>
@@ -304,6 +331,21 @@ export default function LiveAnalysisDisplay({
                     <p className={`text-3xl font-bold ${getScoreColor(result.data.deceptionScore)}`}>
                       {Math.round(result.data.deceptionScore)}%
                     </p>
+                  </div>
+                </div>
+                {/* Lie Probability Progress Bar */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Lie Probability Indicator</span>
+                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{Math.round(result.data.deceptionScore)}%</span>
+                  </div>
+                  <div className="w-full h-3 bg-gray-300 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${result.data.deceptionScore}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut' }}
+                      className="h-full bg-gradient-to-r from-green-500 via-yellow-500 via-orange-500 to-red-600"
+                    />
                   </div>
                 </div>
               </motion.div>
@@ -462,9 +504,12 @@ export default function LiveAnalysisDisplay({
               {Object.entries(result.data.metrics).map(([key, value], idx) => {
                 // Safe rendering with fallback for N/A values
                 let displayValue = value;
+                let numericValue: number | null = null;
+                
                 if (value === 'N/A' || value === null || value === undefined) {
                   displayValue = 'N/A';
                 } else if (typeof value === 'number') {
+                  numericValue = Math.min(Math.max(value, 0), 100); // Clamp to 0-100
                   displayValue = value.toFixed(2);
                 }
                 
@@ -476,12 +521,31 @@ export default function LiveAnalysisDisplay({
                     transition={{ delay: idx * 0.05 }}
                     className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
                   >
-                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 capitalize mb-1">
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 capitalize mb-2">
                       {key.replace(/_/g, ' ')}
                     </p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                    <p className={`text-sm font-bold mb-2 ${displayValue === 'N/A' ? 'text-gray-500 dark:text-gray-400' : getMetricColor(value)}`}>
                       {displayValue}
                     </p>
+                    {/* Progress Bar for numeric values */}
+                    {numericValue !== null && (
+                      <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${numericValue}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                          className={`h-full rounded-full ${
+                            numericValue >= 75
+                              ? 'bg-red-500'
+                              : numericValue >= 50
+                              ? 'bg-orange-500'
+                              : numericValue >= 25
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                          }`}
+                        />
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}
