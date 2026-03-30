@@ -12,7 +12,11 @@
     "dev:frontend": "cd apps/frontend && npm run dev",
     "dev:backend": "cd apps/backend && npm run dev"
   },
-  "keywords": ["trustai", "deception-detection", "interview-analysis"],
+  "keywords": [
+    "trustai",
+    "deception-detection",
+    "interview-analysis"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
