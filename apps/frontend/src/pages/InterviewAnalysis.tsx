@@ -66,7 +66,7 @@ export default function InterviewAnalysis() {
     setProgress(0);
     setError("");
 
-    let progressInterval: NodeJS.Timeout | null = null;
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
       const formData = new FormData();
@@ -81,6 +81,7 @@ export default function InterviewAnalysis() {
         setProgress((p) => Math.min(p + Math.random() * 20, 95));
       }, 500);
 
+      console.log('📁 [InterviewAnalysis] Sending live analysis request...');
       // Make fetch request with proper error handling
       const response = await fetch("http://localhost:8000/analyze/business", {
         method: "POST",
@@ -93,39 +94,40 @@ export default function InterviewAnalysis() {
       }
 
       const data = await response.json();
-
-      // Clear progress interval before completing
-      if (progressInterval) clearInterval(progressInterval);
+      console.log('✅ [InterviewAnalysis] Response received:', data);
+      console.log('📊 [InterviewAnalysis] Nested data (res.data.data):', data?.data);
 
       // Check response format: { success: true, data: {...} }
-      if (data?.success && data?.data) {
-        setAnalysisId(data.data.id || `interview-${Date.now()}`);
+      const analysisData = data?.data || data;
+      
+      if (analysisData?.id) {
+        console.log('✅ [InterviewAnalysis] Analysis data extracted, ID:', analysisData.id);
+        setAnalysisId(analysisData.id);
         setProgress(100);
 
-        // Set live result for display
-        const transformedData = transformAnalysisData(data.data);
+        // Set live result for display using setLiveResult
+        const transformedData = transformAnalysisData(analysisData);
+        console.log('📊 [InterviewAnalysis] Setting liveResult with transformed data:', transformedData);
         setLiveResult({
           timestamp: new Date().toISOString(),
           status: 'complete',
           data: transformedData,
         });
 
-        setTimeout(() => {
-          setIsAnalyzing(false);
-          setAnalysisComplete(true);
-        }, 600);
+        setAnalysisComplete(true);
       } else {
+        console.error('❌ [InterviewAnalysis] No analysis ID in response:', analysisData);
         throw new Error(data?.message || "Invalid response format from server");
       }
     } catch (err) {
-      if (progressInterval) clearInterval(progressInterval);
-      
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-      console.error("Analysis error:", errorMessage, err);
-      
+      console.error("❌ [InterviewAnalysis] Analysis error:", errorMessage, err);
       setError(errorMessage);
-      setIsAnalyzing(false);
       setProgress(0);
+    } finally {
+      if (progressInterval) clearInterval(progressInterval);
+      console.log('🔚 [InterviewAnalysis] Analysis complete, setting isAnalyzing to false');
+      setIsAnalyzing(false);
     }
   };
 
@@ -139,7 +141,7 @@ export default function InterviewAnalysis() {
     setProgress(0);
     setError("");
 
-    let progressInterval: NodeJS.Timeout | null = null;
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
       progressInterval = setInterval(() => {
@@ -147,17 +149,24 @@ export default function InterviewAnalysis() {
       }, 500);
 
       const fileUrl = URL.createObjectURL(selectedFile);
+      console.log('📁 [InterviewAnalysis] Sending file analysis request with fileUrl:', fileUrl);
       const response = await analysisAPI.create({ fileUrl, modes: ["INTERVIEW"] });
+      console.log('✅ [InterviewAnalysis] Response received:', response.data);
+      console.log('📊 [InterviewAnalysis] Nested data (res.data.data):', response.data?.data);
+
+      const analysisData = response.data?.data || response.data;
       
-      if (!response?.data?.data?.id) {
+      if (!analysisData?.id) {
+        console.error('❌ [InterviewAnalysis] No analysis ID in response:', analysisData);
         throw new Error("Invalid response format from server");
       }
 
-      const newAnalysisId = response.data.data.id;
-      setAnalysisId(newAnalysisId);
+      console.log('✅ [InterviewAnalysis] Analysis data extracted, ID:', analysisData.id);
+      setAnalysisId(analysisData.id);
 
-      // Set live result for display
-      const transformedData = transformAnalysisData(response.data.data);
+      // Set live result for display using setLiveResult
+      const transformedData = transformAnalysisData(analysisData);
+      console.log('📊 [InterviewAnalysis] Setting liveResult with transformed data:', transformedData);
       setLiveResult({
         timestamp: new Date().toISOString(),
         status: 'complete',
@@ -165,20 +174,16 @@ export default function InterviewAnalysis() {
       });
 
       setProgress(100);
-      if (progressInterval) clearInterval(progressInterval);
-      setTimeout(() => {
-        setIsAnalyzing(false);
-        setAnalysisComplete(true);
-      }, 600);
+      setAnalysisComplete(true);
     } catch (err) {
-      if (progressInterval) clearInterval(progressInterval);
-      
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-      console.error("File analysis error:", errorMessage, err);
-      
+      console.error("❌ [InterviewAnalysis] File analysis error:", errorMessage, err);
       setError(errorMessage);
-      setIsAnalyzing(false);
       setProgress(0);
+    } finally {
+      if (progressInterval) clearInterval(progressInterval);
+      console.log('🔚 [InterviewAnalysis] Analysis complete, setting isAnalyzing to false');
+      setIsAnalyzing(false);
     }
   };
 

@@ -92,33 +92,38 @@ export default function BusinessAnalysis() {
         body: formData,
       }).then(r => r.json()).then(data => ({ data }));
 
-      if (response.data?.success && response.data?.data) {
-        console.log('✅ [handleLiveAnalysis] Success response received:', response.data);
-        setAnalysisId(response.data.data.id || `business-${Date.now()}`);
-        setProgress(100);
+      clearInterval(progressInterval);
+      console.log('✅ [handleLiveAnalysis] API response received:', response);
+      console.log('📊 [handleLiveAnalysis] Response data structure:', response.data);
+
+      const analysisData = response.data?.data || response.data;
+
+      if (analysisData?.success && analysisData?.data?.id) {
+        console.log('✅ [handleLiveAnalysis] Analysis data extracted, ID:', analysisData.data.id);
+        setAnalysisId(analysisData.data.id);
 
         // Set live result for display
-        const transformedData = transformAnalysisData(response.data.data);
+        const transformedData = transformAnalysisData(analysisData.data);
         console.log('📊 [handleLiveAnalysis] Setting liveResult with transformed data:', transformedData);
         setLiveResult({
           timestamp: new Date().toISOString(),
           status: 'complete',
           data: transformedData,
         });
-      } else {
-        console.error('❌ [handleLiveAnalysis] Analysis failed:', response.data);
-        setError(response.data?.error || "Analysis failed");
-      }
 
-      clearInterval(progressInterval);
-      setTimeout(() => {
-        setIsAnalyzing(false);
+        setProgress(100);
         setAnalysisComplete(true);
-      }, 600);
+      } else {
+        console.error('❌ [handleLiveAnalysis] Analysis failed:', analysisData);
+        setError(analysisData?.error || "Analysis failed");
+      }
     } catch (err) {
+      console.error('❌ [handleLiveAnalysis] Error:', err);
       setError(err instanceof Error ? err.message : "Analysis failed");
-      setIsAnalyzing(false);
       setProgress(0);
+    } finally {
+      console.log('🔚 [handleLiveAnalysis] Analysis complete, setting isAnalyzing to false');
+      setIsAnalyzing(false);
     }
   };
 
@@ -141,32 +146,37 @@ export default function BusinessAnalysis() {
       console.log('📁 [handleFileAnalysis] Sending analysis request with fileUrl:', fileUrl);
       const response = await analysisAPI.create({ fileUrl, modes: ["BUSINESS"] });
       console.log('✅ [handleFileAnalysis] Response received:', response.data);
+      console.log('📊 [handleFileAnalysis] Nested data (res.data.data):', response.data?.data);
 
-      const newAnalysisId = response.data.data.id;
-      setAnalysisId(newAnalysisId);
+      const analysisData = response.data?.data || response.data;
 
-      // Set live result for display
-      const transformedData = transformAnalysisData(response.data.data);
-      console.log('📊 [handleFileAnalysis] Setting liveResult with transformed data:', transformedData);
-      setLiveResult({
-        timestamp: new Date().toISOString(),
-        status: 'complete',
-        data: transformedData,
-      });
+      if (analysisData?.id) {
+        console.log('✅ [handleFileAnalysis] Analysis data extracted, ID:', analysisData.id);
+        setAnalysisId(analysisData.id);
 
-      setProgress(100);
-      clearInterval(progressInterval);
-      console.log('⏱️ [handleFileAnalysis] Setting analysisComplete to true after 600ms');
-      setTimeout(() => {
-        setIsAnalyzing(false);
+        // Set live result for display using setLiveResult
+        const transformedData = transformAnalysisData(analysisData);
+        console.log('📊 [handleFileAnalysis] Setting liveResult with transformed data:', transformedData);
+        setLiveResult({
+          timestamp: new Date().toISOString(),
+          status: 'complete',
+          data: transformedData,
+        });
+
+        setProgress(100);
         setAnalysisComplete(true);
-      }, 600);
+      } else {
+        console.error('❌ [handleFileAnalysis] No analysis ID in response:', analysisData);
+        setError(analysisData?.error || "Analysis failed");
+      }
     } catch (err) {
-      clearInterval(progressInterval);
       console.error('❌ [handleFileAnalysis] Error:', err);
       setError(err instanceof Error ? err.message : "Analysis failed");
-      setIsAnalyzing(false);
       setProgress(0);
+    } finally {
+      clearInterval(progressInterval);
+      console.log('🔚 [handleFileAnalysis] Analysis complete, setting isAnalyzing to false');
+      setIsAnalyzing(false);
     }
   };
 

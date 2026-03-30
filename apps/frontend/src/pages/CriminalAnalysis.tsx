@@ -67,29 +67,40 @@ export default function CriminalAnalysis() {
 
     try {
       const fileUrl = URL.createObjectURL(selectedFile);
+      console.log('📁 [CriminalAnalysis] Sending analysis request with fileUrl:', fileUrl);
       const response = await analysisAPI.create({ fileUrl, modes: ["CRIMINAL"] });
-      const newAnalysisId = response.data.data.id;
-      setAnalysisId(newAnalysisId);
+      console.log('✅ [CriminalAnalysis] Response received:', response.data);
+      console.log('📊 [CriminalAnalysis] Nested data (res.data.data):', response.data?.data);
 
-      // Set live result for display
-      const transformedData = transformAnalysisData(response.data.data);
-      setLiveResult({
-        timestamp: new Date().toISOString(),
-        status: 'complete',
-        data: transformedData,
-      });
+      const analysisData = response.data?.data || response.data;
 
-      setProgress(100);
-      clearInterval(progressInterval);
-      setTimeout(() => {
-        setIsAnalyzing(false);
+      if (analysisData?.id) {
+        console.log('✅ [CriminalAnalysis] Analysis data extracted, ID:', analysisData.id);
+        setAnalysisId(analysisData.id);
+
+        // Set live result for display
+        const transformedData = transformAnalysisData(analysisData);
+        console.log('📊 [CriminalAnalysis] Setting liveResult with transformed data:', transformedData);
+        setLiveResult({
+          timestamp: new Date().toISOString(),
+          status: 'complete',
+          data: transformedData,
+        });
+
+        setProgress(100);
         setAnalysisComplete(true);
-      }, 600);
+      } else {
+        console.error('❌ [CriminalAnalysis] No analysis ID in response:', analysisData);
+        setError(analysisData?.error || "Analysis failed");
+      }
     } catch (err) {
-      clearInterval(progressInterval);
+      console.error('❌ [CriminalAnalysis] Error:', err);
       setError(err instanceof Error ? err.message : "Analysis failed");
-      setIsAnalyzing(false);
       setProgress(0);
+    } finally {
+      clearInterval(progressInterval);
+      console.log('🔚 [CriminalAnalysis] Analysis complete, setting isAnalyzing to false');
+      setIsAnalyzing(false);
     }
   };
 

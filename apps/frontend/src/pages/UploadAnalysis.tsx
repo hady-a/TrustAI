@@ -56,38 +56,53 @@ export default function UploadAnalysis() {
     try {
       // In a real app, you'd upload the file first and get a fileUrl
       // For now, using a placeholder URL
+      console.log('📁 [UploadAnalysis] Starting analysis with file:', selectedFile.name);
+      
       const response = await analysisAPI.create({
         fileUrl: `file:///${selectedFile.name}`,
         modes: [selectedModeValue],
       })
 
-      // Extract analysis ID and transform data
-      if (response.data.success && response.data.data?.id) {
-        setAnalysisId(response.data.data.id)
+      console.log('📊 [UploadAnalysis] API response received:', response);
+      console.log('📊 [UploadAnalysis] Response data structure:', response.data);
+      console.log('📊 [UploadAnalysis] Nested data (res.data.data):', response.data?.data);
 
-        // Set live result for display
-        const transformedData = transformAnalysisData(response.data.data)
+      // Extract analysis ID and transform data - use correct nested response structure
+      const analysisData = response.data?.data || response.data;
+      
+      if (analysisData && analysisData.id) {
+        console.log('✅ [UploadAnalysis] Analysis data extracted, ID:', analysisData.id);
+        setAnalysisId(analysisData.id)
+
+        // Set live result for display using setLiveResult
+        const transformedData = transformAnalysisData(analysisData)
+        console.log('✅ [UploadAnalysis] Transformed data for display:', transformedData);
+        
         setLiveResult({
           timestamp: new Date().toISOString(),
           status: 'complete',
           data: transformedData,
         })
-
+        
+        console.log('✅ [UploadAnalysis] setLiveResult called with transformed data');
         setProgress(100)
-        setTimeout(() => {
-          setIsAnalyzing(false)
-          setAnalysisComplete(true)
-        }, 600)
+        setAnalysisComplete(true)
       } else {
-        setError(response.data.error || "Analysis failed")
-        setIsAnalyzing(false)
+        const errorMsg = analysisData?.error || response.data?.error || "Analysis failed"
+        console.error('❌ [UploadAnalysis] No analysis ID in response:', errorMsg);
+        setError(errorMsg)
       }
     } catch (err) {
       const axiosError = err as AxiosError<{ message: string }>
       const message =
         axiosError.response?.data?.message ||
         "Failed to start analysis. Please try again."
+      console.error('❌ [UploadAnalysis] Error during analysis:', message);
+      console.error('❌ [UploadAnalysis] Full error:', err);
       setError(message)
+    } finally {
+      // Always ensure loading state is reset in finally block
+      console.log('🔚 [UploadAnalysis] Analysis complete, setting isAnalyzing to false');
       setIsAnalyzing(false)
     }
   }
