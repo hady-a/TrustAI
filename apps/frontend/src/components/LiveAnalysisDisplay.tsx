@@ -96,6 +96,9 @@ export default function LiveAnalysisDisplay({
     }
   };
 
+  // Guard: ensure result has valid data before rendering
+  const hasValidData = result?.data && typeof result.data === 'object';
+
   return (
     <div className="w-full space-y-6" ref={resultRef}>
       {/* Analysis Status Header */}
@@ -121,9 +124,26 @@ export default function LiveAnalysisDisplay({
         </div>
       </motion.div>
 
+      {/* No Analysis Available Fallback */}
+      {result && !hasValidData && result.status !== 'error' && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="p-6 text-center bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl"
+        >
+          <AlertCircle className="w-8 h-8 text-yellow-600 dark:text-yellow-400 mx-auto mb-2" />
+          <p className="text-yellow-800 dark:text-yellow-200 font-medium">
+            No analysis data available
+          </p>
+          <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+            The analysis is still processing or the response is incomplete.
+          </p>
+        </motion.div>
+      )}
+
       {/* Current Metrics */}
       <AnimatePresence>
-        {(isAnalyzing || result) && (
+        {(isAnalyzing || (result && hasValidData)) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -181,7 +201,7 @@ export default function LiveAnalysisDisplay({
                   className="text-3xl font-bold text-blue-600 dark:text-blue-400"
                   key={`confidence-${result?.data?.confidence}`}
                 >
-                  {Math.round((result?.data?.confidence || 0) * 100)}
+                  {Math.round(((result?.data?.confidence as number) ?? 0) * 100)}
                 </motion.span>
                 <span className="text-sm text-gray-600 dark:text-gray-400 mb-1">%</span>
               </div>
@@ -240,7 +260,7 @@ export default function LiveAnalysisDisplay({
 
       {/* Insights */}
       <AnimatePresence>
-        {result?.data?.insights && result.data.insights.length > 0 && (
+        {result?.data?.insights && Array.isArray(result.data.insights) && result.data.insights.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -261,7 +281,7 @@ export default function LiveAnalysisDisplay({
                       className="text-sm text-gray-700 dark:text-gray-300 flex gap-2"
                     >
                       <span className="text-blue-600 dark:text-blue-400 font-bold">•</span>
-                      <span>{insight}</span>
+                      <span>{insight || 'Analysis insight'}</span>
                     </motion.div>
                   ))}
                 </div>
@@ -282,22 +302,32 @@ export default function LiveAnalysisDisplay({
           >
             <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Detailed Metrics</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {Object.entries(result.data.metrics).map(([key, value], idx) => (
-                <motion.div
-                  key={key}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                >
-                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 capitalize mb-1">
-                    {key.replace(/_/g, ' ')}
-                  </p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                    {typeof value === 'number' ? value.toFixed(2) : value}
-                  </p>
-                </motion.div>
-              ))}
+              {Object.entries(result.data.metrics).map(([key, value], idx) => {
+                // Safe rendering with fallback for N/A values
+                let displayValue = value;
+                if (value === 'N/A' || value === null || value === undefined) {
+                  displayValue = 'N/A';
+                } else if (typeof value === 'number') {
+                  displayValue = value.toFixed(2);
+                }
+                
+                return (
+                  <motion.div
+                    key={key}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 capitalize mb-1">
+                      {key.replace(/_/g, ' ')}
+                    </p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                      {displayValue}
+                    </p>
+                  </motion.div>
+                );
+              })}
             </div>
           </motion.div>
         )}
