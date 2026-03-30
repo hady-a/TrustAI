@@ -7,6 +7,7 @@ import FileUploader from "../components/FileUploader";
 import ProgressBar from "../components/ProgressBar";
 import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay";
 import { analysisAPI } from "../lib/api";
+import { transformAnalysisData } from "../utils/transformAnalysisData";
 
 interface InterviewResponse {
   questionIndex: number;
@@ -33,41 +34,6 @@ export default function BusinessAnalysis() {
     setInputMethod(method);
     setError("");
     setSelectedFile(null);
-  };
-
-  // Transform API response to LiveAnalysisDisplay format
-  const transformAnalysisData = (apiResponse: any) => {
-    console.log('🔍 [transformAnalysisData] Raw API response:', JSON.stringify(apiResponse, null, 2));
-
-    const analysis = apiResponse?.data?.data?.analysis || apiResponse?.data?.analysis || apiResponse?.analysis || {};
-    console.log('🔍 [transformAnalysisData] Extracted analysis:', JSON.stringify(analysis, null, 2));
-
-    // Safely extract nested fields with fallbacks
-    const credibilityData = analysis?.credibility || {}
-    const voiceData = analysis?.voice || {}
-    const stressData = voiceData?.stress || {}
-    const emotionData = voiceData?.emotion || {}
-    const transcriptionData = voiceData?.transcription || {}
-
-    const transformed = {
-      deceptionScore: credibilityData?.lie_probability || 0,
-      credibilityScore: 100 - (credibilityData?.lie_probability || 0),
-      confidence: (credibilityData?.confidence || 0) / 100,
-      metrics: {
-        lie_probability: credibilityData?.lie_probability ?? 'N/A',
-        credibility_confidence: credibilityData?.confidence ?? 'N/A',
-        voice_stress: stressData?.stress_level ?? 'N/A',
-        voice_emotion: emotionData?.emotion ?? 'N/A',
-        transcription: transcriptionData?.transcript || '(No data)',
-      },
-      insights: [
-        credibilityData?.analysis || 'Analysis complete',
-        `Voice emotion: ${emotionData?.emotion || 'Unknown'}`,
-        `Stress level: ${stressData?.stress_level || 0}/100`,
-      ],
-    };
-    console.log('✅ [transformAnalysisData] Transformed data:', JSON.stringify(transformed, null, 2));
-    return transformed;
   };
 
   const handleFileSelect = (file: File | null) => {

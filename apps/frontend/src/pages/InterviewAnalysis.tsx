@@ -7,6 +7,7 @@ import FileUploader from "../components/FileUploader";
 import ProgressBar from "../components/ProgressBar";
 import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay";
 import { analysisAPI } from "../lib/api";
+import { transformAnalysisData } from "../utils/transformAnalysisData";
 
 interface InterviewResponse {
   questionIndex: number;
@@ -40,34 +41,7 @@ export default function InterviewAnalysis() {
     setError("");
   };
 
-  const transformAnalysisData = (apiResponse: any) => {
-    const analysis = apiResponse?.data?.data?.analysis || apiResponse?.data?.analysis || apiResponse?.analysis || {};
-    
-    // Safely extract nested fields with fallbacks
-    const credibilityData = analysis?.credibility || {}
-    const voiceData = analysis?.voice || {}
-    const stressData = voiceData?.stress || {}
-    const emotionData = voiceData?.emotion || {}
-    const transcriptionData = voiceData?.transcription || {}
-    
-    return {
-      deceptionScore: credibilityData?.lie_probability || 0,
-      credibilityScore: 100 - (credibilityData?.lie_probability || 0),
-      confidence: (credibilityData?.confidence || 0) / 100,
-      metrics: {
-        lie_probability: credibilityData?.lie_probability ?? 'N/A',
-        credibility_confidence: credibilityData?.confidence ?? 'N/A',
-        voice_stress: stressData?.stress_level ?? 'N/A',
-        voice_emotion: emotionData?.emotion ?? 'N/A',
-        transcription: transcriptionData?.transcript || '(No data)',
-      },
-      insights: [
-        credibilityData?.analysis || 'Analysis complete',
-        `Voice emotion: ${emotionData?.emotion || 'Unknown'}`,
-        `Stress level: ${stressData?.stress_level || 0}/100`,
-      ],
-    };
-  };
+
 
   const handleLiveAnalysis = async (videoBlob: Blob, audioBlob: Blob, answers: InterviewResponse[]) => {
     setIsAnalyzing(true);
