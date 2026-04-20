@@ -14,6 +14,7 @@ const NAV_ITEMS = [
     { name: "Analysis Logs", path: "/admin/logs", icon: "🔍" },
     { name: "Backups", path: "/admin/backups", icon: "💾" },
     { name: "Settings", path: "/admin/settings", icon: "⚙️" },
+    { name: "Quality Tests", path: "/admin/tests", icon: "🧪" },
 ]
 
 export default function AdminLayout({ children }: AdminLayoutProps) {

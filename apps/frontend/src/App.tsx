@@ -49,6 +49,7 @@ function AppRoutes() {
         <Route path="/admin/logs" element={<AdminLayout><AdminLogs /></AdminLayout>} />
         <Route path="/admin/backups" element={<AdminLayout><AdminBackups /></AdminLayout>} />
         <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
+        <Route path="/admin/tests" element={<AdminLayout><MasterTestRunnerUI /></AdminLayout>} />
 
         {/* Public Routes - No Navbar */}
         <Route path="/login" element={<PublicLayout><LoginNew /></PublicLayout>} />
