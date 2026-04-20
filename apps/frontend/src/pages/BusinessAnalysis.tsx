@@ -51,6 +51,8 @@ export default function BusinessAnalysis() {
     const controller = new AbortController();
     currentController.current = controller;
 
+    // Reset state before starting new analysis
+    analysis.setLiveResult(null);
     analysis.setIsAnalyzing(true);
     analysis.setProgress(0);
     analysis.clearError();
