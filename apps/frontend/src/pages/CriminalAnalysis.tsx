@@ -2,94 +2,96 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
+import AnalysisError from "../components/AnalysisError";
+import AnalysisProgress from "../components/AnalysisProgress";
+import AnalysisResults from "../components/AnalysisResults";
 import FileUploader from "../components/FileUploader";
-import ProgressBar from "../components/ProgressBar";
-import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay";
-import { analysisAPI } from "../lib/api";
-import { transformAnalysisData } from "../utils/transformAnalysisData";
+import { useAnalysisState } from "../hooks/useAnalysisState";
 
 export default function CriminalAnalysis() {
   const navigate = useNavigate();
   const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string>("");
-  const [analysisId, setAnalysisId] = useState<string>("");
-  const [analysisComplete, setAnalysisComplete] = useState(false);
-  const [liveResult, setLiveResult] = useState<any | null>(null);
+  const analysis = useAnalysisState();
 
   const handleInputMethodSelect = (method: "upload") => {
     setInputMethod(method);
-    setError("");
+    analysis.clearError();
     setSelectedFile(null);
   };
 
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
-    setError("");
+    analysis.clearError();
   };
-
-  // Transform API response to LiveAnalysisDisplay format
-
 
   const handleFileAnalysis = async () => {
     if (!selectedFile) {
-      setError("Please select a file to analyze");
+      analysis.setAnalysisError("Please select a file to analyze");
       return;
     }
 
-    setIsAnalyzing(true);
-    setProgress(0);
-    setError("");
+    analysis.setIsAnalyzing(true);
+    analysis.setProgress(0);
+    analysis.clearError();
 
-    const progressInterval = setInterval(() => {
-      setProgress((p) => Math.min(p + Math.random() * 20, 95));
-    }, 500);
+    const progressInterval = analysis.startProgress();
 
     try {
-      const fileUrl = URL.createObjectURL(selectedFile);
-      console.log('📁 [CriminalAnalysis] Sending analysis request with fileUrl:', fileUrl);
-      const response = await analysisAPI.create({ fileUrl, modes: ["CRIMINAL"] });
-      console.log('✅ [CriminalAnalysis] Response received:', response.data);
-      console.log('📊 [CriminalAnalysis] Nested data (res.data.data):', response.data?.data);
+      const formData = new FormData();
+      formData.append('audio', selectedFile, selectedFile.name);
 
-      const analysisData = response.data?.data || response.data;
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9999/api';
+      const token = localStorage.getItem('authToken');
+      console.log('📁 [CriminalAnalysis] Sending analysis request...');
+      const res = await fetch(`${apiBase}/analyze/investigation`, {
+        method: 'POST',
+        body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: AbortSignal.timeout(120000),
+      });
 
-      if (analysisData?.id) {
-        console.log('✅ [CriminalAnalysis] Analysis data extracted, ID:', analysisData.id);
-        setAnalysisId(analysisData.id);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
 
-        // Set live result for display
-        const transformedData = transformAnalysisData(analysisData);
-        console.log('📊 [CriminalAnalysis] Setting liveResult with transformed data:', transformedData);
-        setLiveResult({
-          timestamp: new Date().toISOString(),
-          status: 'complete',
-          data: transformedData,
-        });
+      const response = await res.json();
+      console.log('✅ [CriminalAnalysis] Response received:', response);
 
-        setProgress(100);
-        setAnalysisComplete(true);
+      // Extract analysis data with safe access
+      // Backend structure: {success, data: {face, voice, credibility, errors}, timestamp, report_type}
+      const analysisData = response?.data;
+      console.log("🔍 FRONTEND DATA:", analysisData);
+      console.log("📋 Data keys:", analysisData ? Object.keys(analysisData) : 'no data');
+
+      if (analysisData) {
+        console.log('✅ [CriminalAnalysis] Analysis data extracted successfully');
+        if (analysisData.id) analysis.setAnalysisId(analysisData.id);
+        analysis.setAnalysisSuccess(analysisData);
       } else {
-        console.error('❌ [CriminalAnalysis] No analysis ID in response:', analysisData);
-        setError(analysisData?.error || "Analysis failed");
+        console.error('❌ [CriminalAnalysis] No data in response:', response);
+        analysis.setAnalysisError("Analysis failed");
       }
     } catch (err) {
       console.error('❌ [CriminalAnalysis] Error:', err);
-      setError(err instanceof Error ? err.message : "Analysis failed");
-      setProgress(0);
+      analysis.setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       clearInterval(progressInterval);
       console.log('🔚 [CriminalAnalysis] Analysis complete, setting isAnalyzing to false');
-      setIsAnalyzing(false);
+      analysis.setIsAnalyzing(false);
     }
   };
 
-  // Show input method selector if no method chosen
-  if (inputMethod === null && !isAnalyzing && !analysisComplete) {
+  const handleReset = () => {
+    analysis.resetState();
+    setInputMethod(null);
+    setSelectedFile(null);
+  };
+
+  // Show input method selector
+  if (inputMethod === null && !analysis.isAnalyzing && !analysis.analysisComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-20 px-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-12 sm:py-16 md:py-20 px-4 sm:px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <motion.div
             animate={{ scale: [1, 1.2, 1] }}
@@ -108,33 +110,33 @@ export default function CriminalAnalysis() {
             initial={{ opacity: 0, y: -40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="grid md:grid-cols-2 gap-12 items-center mb-12"
+            className="grid sm:grid-cols-2 gap-8 sm:gap-12 items-center mb-12 sm:mb-16"
           >
             <div>
-              <h1 className="text-6xl md:text-7xl font-black text-white mb-4 tracking-tighter">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white mb-2 sm:mb-4 tracking-tighter leading-tight">
                 Criminal<br />
                 <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">Investigation</span>
               </h1>
-              <p className="text-gray-400 text-lg max-w-xl">
+              <p className="text-gray-400 text-xs sm:text-sm md:text-base lg:text-lg max-w-xl leading-relaxed">
                 Analyze suspects, detect deception, and identify inconsistencies in speech patterns
               </p>
             </div>
             <motion.div
               animate={{ rotate: [0, 5, -5, 0] }}
               transition={{ duration: 6, repeat: Infinity }}
-              className="text-9xl drop-shadow-2xl"
+              className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl drop-shadow-2xl hidden sm:block"
             >
               🔬
             </motion.div>
           </motion.div>
 
-          <InputMethodSelector onSelect={handleInputMethodSelect} isLoading={isAnalyzing} />
+          <InputMethodSelector onSelect={handleInputMethodSelect} isLoading={analysis.isAnalyzing} />
 
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => navigate(-1)}
-            className="mt-12 px-8 py-3 border-2 border-gray-600 text-gray-300 rounded-lg font-bold hover:border-gray-500 transition-all mx-auto block"
+            className="mt-12 px-4 sm:px-8 py-2 sm:py-3 border-2 border-gray-600 text-gray-300 text-sm sm:text-base rounded-lg font-bold hover:border-gray-500 transition-all mx-auto block min-h-10 sm:min-h-12"
           >
             ← Back
           </motion.button>
@@ -144,9 +146,9 @@ export default function CriminalAnalysis() {
   }
 
   // Show file upload
-  if (inputMethod === "upload" && !isAnalyzing && !analysisComplete) {
+  if (inputMethod === "upload" && !analysis.isAnalyzing && !analysis.analysisComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-20 px-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-12 sm:py-16 md:py-20 px-4 sm:px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <motion.div
             animate={{ scale: [1, 1.2, 1] }}
@@ -155,33 +157,33 @@ export default function CriminalAnalysis() {
           />
         </div>
 
-        <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-0">
           <motion.div
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-12 flex items-center justify-between"
+            className="mb-8 sm:mb-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-8"
           >
-            <div>
+            <div className="flex-1">
               <button
                 onClick={() => setInputMethod(null)}
-                className="text-gray-400 hover:text-gray-300 font-semibold flex items-center gap-2 mb-6"
+                className="text-gray-400 hover:text-gray-300 font-semibold text-xs sm:text-sm flex items-center gap-2 mb-3 sm:mb-6"
               >
                 ← Change Input Method
               </button>
-              <h2 className="text-4xl font-bold text-white">Upload Evidence File</h2>
-              <p className="text-gray-400 mt-2">Upload video, audio, or image evidence for analysis</p>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white leading-tight">Upload Evidence File</h2>
+              <p className="text-gray-400 text-xs sm:text-sm md:text-base mt-2 leading-relaxed">Upload video, audio, or image evidence for analysis</p>
             </div>
-            <div className="text-7xl">📁</div>
+            <div className="text-5xl sm:text-6xl md:text-7xl flex-shrink-0">📁</div>
           </motion.div>
 
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="mb-8 p-5 bg-red-950/40 border-l-4 border-red-600 backdrop-blur-sm"
-            >
-              <p className="text-red-300 font-mono text-sm">⚠️ ALERT: {error}</p>
-            </motion.div>
+          {analysis.error && (
+            <AnalysisError 
+              message={analysis.error} 
+              onRetry={() => {
+                analysis.handleRetry()
+                if (selectedFile) handleFileAnalysis()
+              }}
+            />
           )}
 
           <motion.div
@@ -227,7 +229,7 @@ export default function CriminalAnalysis() {
   }
 
   // Show analyzing state
-  if (isAnalyzing) {
+  if (analysis.isAnalyzing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden flex items-center justify-center py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -259,7 +261,7 @@ export default function CriminalAnalysis() {
           <h2 className="text-4xl font-black text-white mb-2">PROCESSING EVIDENCE</h2>
           <p className="text-gray-400 text-lg mb-8">Forensic analysis in progress...</p>
 
-          <ProgressBar progress={progress} />
+          <AnalysisProgress progress={analysis.progress} isAnalyzing={analysis.isAnalyzing} />
 
           <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
@@ -273,11 +275,11 @@ export default function CriminalAnalysis() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + i * 0.1 }}
                 className={`p-4 rounded-lg border-2 transition-all ${
-                  progress > i * 35 ? "border-red-600 bg-red-900/20" : "border-gray-700/50 bg-gray-900/20"
+                  analysis.progress > i * 35 ? "border-red-600 bg-red-900/20" : "border-gray-700/50 bg-gray-900/20"
                 }`}
               >
                 <p className="text-2xl mb-2">{item.icon}</p>
-                <p className={`font-bold ${progress > i * 35 ? "text-red-300" : "text-gray-400"}`}>{item.stage}</p>
+                <p className={`font-bold ${analysis.progress > i * 35 ? "text-red-300" : "text-gray-400"}`}>{item.stage}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -287,7 +289,7 @@ export default function CriminalAnalysis() {
   }
 
   // Show completion state
-  if (analysisComplete) {
+  if (analysis.analysisComplete) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0B0F19] via-[#1a1515] to-[#0B0F19] relative overflow-hidden py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -318,46 +320,25 @@ export default function CriminalAnalysis() {
             <p className="text-gray-400 text-xl">Evidence processed and analyzed successfully</p>
           </motion.div>
 
-          {/* Display Live Analysis Results */}
-          {liveResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="mb-12 p-8 bg-gray-900/50 border border-gray-800 rounded-xl"
-            >
-              <LiveAnalysisDisplay
-                result={liveResult}
-                isAnalyzing={false}
-              />
-            </motion.div>
-          )}
+          <AnalysisResults 
+            liveResult={analysis.liveResult}
+            analysisId={analysis.analysisId}
+            onReset={handleReset}
+          />
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center"
+            transition={{ delay: 0.5 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center mt-8"
           >
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate(`/analysis/criminal/result/${analysisId}`)}
+              onClick={() => navigate(`/analysis/criminal/result/${analysis.analysisId}`)}
               className="px-12 py-4 bg-gradient-to-r from-red-700 to-red-900 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-red-600/50 transition-all shadow-lg"
             >
               📊 VIEW FULL REPORT
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                setAnalysisComplete(false);
-                setInputMethod(null);
-                setLiveResult(null);
-              }}
-              className="px-12 py-4 border-2 border-red-700 text-red-300 rounded-lg font-bold hover:bg-red-700/10 transition-all"
-            >
-              🔄 NEW ANALYSIS
             </motion.button>
           </motion.div>
         </div>

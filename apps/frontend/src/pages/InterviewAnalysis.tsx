@@ -2,175 +2,96 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
-import InterviewLiveForm from "../components/InterviewLiveForm";
+import AnalysisError from "../components/AnalysisError";
+import AnalysisProgress from "../components/AnalysisProgress";
+import AnalysisResults from "../components/AnalysisResults";
 import FileUploader from "../components/FileUploader";
-import ProgressBar from "../components/ProgressBar";
-import LiveAnalysisDisplay from "../components/LiveAnalysisDisplay";
-import { analysisAPI } from "../lib/api";
-import { transformAnalysisData } from "../utils/transformAnalysisData";
-
-interface InterviewResponse {
-  questionIndex: number;
-  questionText: string;
-  answerText: string;
-  answerVoice: boolean;
-  audioBlob?: Blob;
-  recordedAt: number;
-  duration?: number;
-}
+import { useAnalysisState } from "../hooks/useAnalysisState";
 
 export default function InterviewAnalysis() {
   const navigate = useNavigate();
-  const [inputMethod, setInputMethod] = useState<"live" | "upload" | null>(null);
+  const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string>("");
-  const [analysisId, setAnalysisId] = useState<string>("");
-  const [analysisComplete, setAnalysisComplete] = useState(false);
-  const [liveResult, setLiveResult] = useState<any | null>(null);
+  const analysis = useAnalysisState();
 
-  const handleInputMethodSelect = (method: "live" | "upload") => {
+  const handleInputMethodSelect = (method: "upload") => {
     setInputMethod(method);
-    setError("");
+    analysis.clearError();
     setSelectedFile(null);
   };
 
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
-    setError("");
-  };
-
-
-
-  const handleLiveAnalysis = async (videoBlob: Blob, audioBlob: Blob, answers: InterviewResponse[]) => {
-    setIsAnalyzing(true);
-    setProgress(0);
-    setError("");
-
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
-
-    try {
-      const formData = new FormData();
-      formData.append("audio", audioBlob, `interview-audio-${Date.now()}.wav`);
-      formData.append("image", videoBlob, `interview-video-${Date.now()}.webm`);
-
-      // Add answers as JSON
-      formData.append("answers", JSON.stringify(answers));
-
-      // Start progress animation
-      progressInterval = setInterval(() => {
-        setProgress((p) => Math.min(p + Math.random() * 20, 95));
-      }, 500);
-
-      console.log('📁 [InterviewAnalysis] Sending live analysis request...');
-      // Make fetch request with proper error handling
-      const response = await fetch("http://localhost:8000/analyze/business", {
-        method: "POST",
-        body: formData,
-        signal: AbortSignal.timeout(120000), // 2 minute timeout
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ [InterviewAnalysis] Response received:', data);
-      console.log('📊 [InterviewAnalysis] Nested data (res.data.data):', data?.data);
-
-      // Check response format: { success: true, data: {...} }
-      const analysisData = data?.data || data;
-      
-      if (analysisData?.id) {
-        console.log('✅ [InterviewAnalysis] Analysis data extracted, ID:', analysisData.id);
-        setAnalysisId(analysisData.id);
-        setProgress(100);
-
-        // Set live result for display using setLiveResult
-        const transformedData = transformAnalysisData(analysisData);
-        console.log('📊 [InterviewAnalysis] Setting liveResult with transformed data:', transformedData);
-        setLiveResult({
-          timestamp: new Date().toISOString(),
-          status: 'complete',
-          data: transformedData,
-        });
-
-        setAnalysisComplete(true);
-      } else {
-        console.error('❌ [InterviewAnalysis] No analysis ID in response:', analysisData);
-        throw new Error(data?.message || "Invalid response format from server");
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-      console.error("❌ [InterviewAnalysis] Analysis error:", errorMessage, err);
-      setError(errorMessage);
-      setProgress(0);
-    } finally {
-      if (progressInterval) clearInterval(progressInterval);
-      console.log('🔚 [InterviewAnalysis] Analysis complete, setting isAnalyzing to false');
-      setIsAnalyzing(false);
-    }
+    analysis.clearError();
   };
 
   const handleFileAnalysis = async () => {
     if (!selectedFile) {
-      setError("Please select a file to analyze");
+      analysis.setAnalysisError("Please select a file to analyze");
       return;
     }
 
-    setIsAnalyzing(true);
-    setProgress(0);
-    setError("");
+    analysis.setIsAnalyzing(true);
+    analysis.setProgress(0);
+    analysis.clearError();
 
     let progressInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
-      progressInterval = setInterval(() => {
-        setProgress((p) => Math.min(p + Math.random() * 20, 95));
-      }, 500);
+      progressInterval = analysis.startProgress();
 
-      const fileUrl = URL.createObjectURL(selectedFile);
-      console.log('📁 [InterviewAnalysis] Sending file analysis request with fileUrl:', fileUrl);
-      const response = await analysisAPI.create({ fileUrl, modes: ["INTERVIEW"] });
-      console.log('✅ [InterviewAnalysis] Response received:', response.data);
-      console.log('📊 [InterviewAnalysis] Nested data (res.data.data):', response.data?.data);
+      const formData = new FormData();
+      formData.append('audio', selectedFile, selectedFile.name);
 
-      const analysisData = response.data?.data || response.data;
-      
-      if (!analysisData?.id) {
-        console.error('❌ [InterviewAnalysis] No analysis ID in response:', analysisData);
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9999/api';
+      console.log('📁 [InterviewAnalysis] Sending file analysis request');
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`${apiBase}/analyze/interview`, {
+        method: 'POST',
+        body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const response = await res.json();
+      console.log('✅ [InterviewAnalysis] Response received:', response);
+
+      // Extract analysis data with safe access
+      // Backend structure: {success, data: {face, voice, credibility, errors}, timestamp, report_type}
+      const analysisData = response?.data;
+      console.log("🔍 FRONTEND DATA:", analysisData);
+      console.log("📋 Data keys:", analysisData ? Object.keys(analysisData) : 'no data');
+
+      if (!analysisData) {
+        console.error('❌ [InterviewAnalysis] No analysis data in response:', response);
         throw new Error("Invalid response format from server");
       }
 
-      console.log('✅ [InterviewAnalysis] Analysis data extracted, ID:', analysisData.id);
-      setAnalysisId(analysisData.id);
-
-      // Set live result for display using setLiveResult
-      const transformedData = transformAnalysisData(analysisData);
-      console.log('📊 [InterviewAnalysis] Setting liveResult with transformed data:', transformedData);
-      setLiveResult({
-        timestamp: new Date().toISOString(),
-        status: 'complete',
-        data: transformedData,
-      });
-
-      setProgress(100);
-      setAnalysisComplete(true);
+      console.log('✅ [InterviewAnalysis] Analysis data extracted successfully');
+      if (analysisData.id) analysis.setAnalysisId(analysisData.id);
+      analysis.setAnalysisSuccess(analysisData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-      console.error("❌ [InterviewAnalysis] File analysis error:", errorMessage, err);
-      setError(errorMessage);
-      setProgress(0);
+      console.error("❌ [InterviewAnalysis] File analysis error:", errorMessage);
+      analysis.setAnalysisError(errorMessage);
     } finally {
       if (progressInterval) clearInterval(progressInterval);
-      console.log('🔚 [InterviewAnalysis] Analysis complete, setting isAnalyzing to false');
-      setIsAnalyzing(false);
+      analysis.setIsAnalyzing(false);
     }
   };
 
-  // Show input method selector if no method chosen
-  if (inputMethod === null && !isAnalyzing && !analysisComplete) {
+  const handleReset = () => {
+    analysis.resetState();
+    setInputMethod(null);
+    setSelectedFile(null);
+  };
+
+  // Show input method selector
+  if (inputMethod === null && !analysis.isAnalyzing && !analysis.analysisComplete) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -199,7 +120,7 @@ export default function InterviewAnalysis() {
                 <span className="bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-transparent">Analysis</span>
               </h1>
               <p className="text-gray-400 text-lg max-w-xl">
-                Analyze interviews for credibility, behavioral cues, and linguistic signals in real-time
+                Analyze interviews for credibility, behavioral cues, and linguistic signals
               </p>
             </div>
             <motion.div
@@ -211,7 +132,7 @@ export default function InterviewAnalysis() {
             </motion.div>
           </motion.div>
 
-          <InputMethodSelector onSelect={handleInputMethodSelect} isLoading={isAnalyzing} />
+          <InputMethodSelector onSelect={handleInputMethodSelect} isLoading={analysis.isAnalyzing} />
 
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -226,52 +147,8 @@ export default function InterviewAnalysis() {
     );
   }
 
-  // Show live capture
-  if (inputMethod === "live" && !isAnalyzing && !analysisComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ scale: [1, 1.15, 1] }}
-            transition={{ duration: 3, repeat: Infinity }}
-            className="absolute top-1/3 left-1/4 w-52 h-52 bg-cyan-500/15 rounded-full blur-3xl"
-          />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
-            <button
-              onClick={() => setInputMethod(null)}
-              className="text-gray-400 hover:text-gray-300 font-semibold flex items-center gap-2 mb-6"
-            >
-              ← Change Input Method
-            </button>
-            <h2 className="text-4xl font-bold text-white">Live Interview Analysis</h2>
-            <p className="text-gray-400 mt-2">Answer the interview questions in real-time</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <InterviewLiveForm
-              onAnalysisStart={handleLiveAnalysis}
-              isAnalyzing={isAnalyzing}
-              mode="Interview Analysis"
-            />
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-
   // Show file upload
-  if (inputMethod === "upload" && !isAnalyzing && !analysisComplete) {
+  if (inputMethod === "upload" && !analysis.isAnalyzing && !analysis.analysisComplete) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -286,29 +163,26 @@ export default function InterviewAnalysis() {
           <motion.div
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-12 flex items-center justify-between"
+            className="mb-12"
           >
-            <div>
-              <button
-                onClick={() => setInputMethod(null)}
-                className="text-gray-400 hover:text-gray-300 font-semibold flex items-center gap-2 mb-6"
-              >
-                ← Change Input Method
-              </button>
-              <h2 className="text-4xl font-bold text-white">Upload Interview File</h2>
-              <p className="text-gray-400 mt-2">Upload audio or video file of an interview for analysis</p>
-            </div>
-            <div className="text-7xl">📁</div>
+            <button
+              onClick={() => setInputMethod(null)}
+              className="text-gray-400 hover:text-gray-300 font-semibold flex items-center gap-2 mb-6"
+            >
+              ← Change Input Method
+            </button>
+            <h2 className="text-4xl font-bold text-white">Upload Interview File</h2>
+            <p className="text-gray-400 mt-2">Upload audio or video file for analysis</p>
           </motion.div>
 
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="mb-8 p-5 bg-blue-950/40 border-l-4 border-blue-600 backdrop-blur-sm"
-            >
-              <p className="text-blue-300 font-mono text-sm">⚠️ ERROR: {error}</p>
-            </motion.div>
+          {analysis.error && (
+            <AnalysisError
+              message={analysis.error}
+              onRetry={() => {
+                analysis.handleRetry();
+                if (selectedFile) handleFileAnalysis();
+              }}
+            />
           )}
 
           <motion.div
@@ -354,7 +228,7 @@ export default function InterviewAnalysis() {
   }
 
   // Show analyzing state
-  if (isAnalyzing) {
+  if (analysis.isAnalyzing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden flex items-center justify-center py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -386,7 +260,7 @@ export default function InterviewAnalysis() {
           <h2 className="text-4xl font-black text-white mb-2">ANALYZING CONVERSATION</h2>
           <p className="text-gray-400 text-lg mb-8">Extracting insights from interview...</p>
 
-          <ProgressBar progress={progress} />
+          <AnalysisProgress progress={analysis.progress} isAnalyzing={analysis.isAnalyzing} />
 
           <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
@@ -400,11 +274,11 @@ export default function InterviewAnalysis() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + i * 0.1 }}
                 className={`p-4 rounded-lg border-2 transition-all ${
-                  progress > i * 35 ? "border-cyan-600 bg-cyan-900/20" : "border-gray-700/50 bg-gray-900/20"
+                  analysis.progress > i * 35 ? "border-cyan-600 bg-cyan-900/20" : "border-gray-700/50 bg-gray-900/20"
                 }`}
               >
                 <p className="text-2xl mb-2">{item.icon}</p>
-                <p className={`font-bold ${progress > i * 35 ? "text-cyan-300" : "text-gray-400"}`}>{item.stage}</p>
+                <p className={`font-bold ${analysis.progress > i * 35 ? "text-cyan-300" : "text-gray-400"}`}>{item.stage}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -414,7 +288,7 @@ export default function InterviewAnalysis() {
   }
 
   // Show completion state
-  if (analysisComplete) {
+  if (analysis.analysisComplete) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -426,7 +300,6 @@ export default function InterviewAnalysis() {
         </div>
 
         <div className="relative z-10 max-w-6xl mx-auto">
-          {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -446,47 +319,25 @@ export default function InterviewAnalysis() {
             <p className="text-gray-400 text-lg">Interview transcript analyzed and insights extracted</p>
           </motion.div>
 
-          {/* Live Analysis Display */}
-          {liveResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-12 p-8 bg-gray-900/50 border border-gray-800 rounded-xl"
-            >
-              <LiveAnalysisDisplay
-                result={liveResult}
-                isAnalyzing={false}
-              />
-            </motion.div>
-          )}
+          <AnalysisResults
+            liveResult={analysis.liveResult}
+            analysisId={analysis.analysisId}
+            onReset={handleReset}
+          />
 
-          {/* Action Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center mb-8"
+            transition={{ delay: 0.5 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center mt-8"
           >
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => navigate(`/analysis/interview/result/${analysisId}`)}
+              onClick={() => navigate(`/analysis/interview/result/${analysis.analysisId}`)}
               className="px-12 py-4 bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-cyan-600/50 transition-all shadow-lg"
             >
               📊 VIEW FULL REPORT
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                setInputMethod(null);
-                setAnalysisComplete(false);
-                setLiveResult(null);
-                setSelectedFile(null);
-              }}
-              className="px-12 py-4 border-2 border-cyan-600 text-cyan-400 rounded-lg font-bold hover:bg-cyan-900/20 transition-all"
-            >
-              🔄 NEW ANALYSIS
             </motion.button>
           </motion.div>
         </div>
