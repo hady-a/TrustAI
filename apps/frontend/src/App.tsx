@@ -30,6 +30,7 @@ const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"))
 const LoginNew = lazy(() => import("./pages/LoginNew"))
 const SignupNew = lazy(() => import("./pages/SignupNew"))
 const ModeSelectionNew = lazy(() => import("./pages/ModeSelectionNew"))
+const MasterTestRunnerUI = lazy(() => import("./components/MasterTestRunnerUI"))
 
 // Loading component
 const PageLoader = () => <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div></div>
@@ -62,7 +63,8 @@ function AppRoutes() {
         <Route path="/analysis/interview" element={<MainLayout><InterviewAnalysis /></MainLayout>} />
         <Route path="/analysis/business" element={<MainLayout><BusinessAnalysis /></MainLayout>} />
         <Route path="/microphone" element={<MainLayout><MicrophoneStream /></MainLayout>} />
-        
+        <Route path="/test" element={<MainLayout><MasterTestRunnerUI /></MainLayout>} />
+
         {/* Results Pages */}
         <Route path="/analysis/business/result/:id" element={<MainLayout><ResultsPage mode="BUSINESS" /></MainLayout>} />
         <Route path="/analysis/criminal/result/:id" element={<MainLayout><ResultsPage mode="CRIMINAL" /></MainLayout>} />

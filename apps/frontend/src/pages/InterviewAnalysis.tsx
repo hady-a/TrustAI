@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
@@ -13,6 +13,11 @@ export default function InterviewAnalysis() {
   const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const analysis = useAnalysisState();
+
+  // Request ID tracking to prevent stale data updates (race conditions)
+  const latestRequestId = useRef(0);
+  // AbortController for canceling previous requests
+  const currentController = useRef<AbortController | null>(null);
 
   const handleInputMethodSelect = (method: "upload") => {
     setInputMethod(method);
@@ -31,6 +36,21 @@ export default function InterviewAnalysis() {
       return;
     }
 
+    // Use timestamp as unique request ID for this request
+    const requestId = Date.now();
+    latestRequestId.current = requestId;
+    console.log(`🔢 [InterviewAnalysis] Starting request ${requestId}`);
+
+    // Abort any previous requests before starting new one
+    if (currentController.current) {
+      console.log(`🛑 [InterviewAnalysis] Aborting previous request`);
+      currentController.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    currentController.current = controller;
+
     analysis.setIsAnalyzing(true);
     analysis.setProgress(0);
     analysis.clearError();
@@ -44,13 +64,14 @@ export default function InterviewAnalysis() {
       formData.append('audio', selectedFile, selectedFile.name);
 
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9999/api';
-      console.log('📁 [InterviewAnalysis] Sending file analysis request');
+      console.log(`📁 [InterviewAnalysis] Sending file analysis request (ID: ${requestId})`);
       const token = localStorage.getItem('authToken');
       const res = await fetch(`${apiBase}/analyze/interview`, {
         method: 'POST',
         body: formData,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        signal: AbortSignal.timeout(120000),
+        signal: controller.signal, // ← Pass abort signal
+        timeout: 120000,
       });
 
       if (!res.ok) {
@@ -58,7 +79,17 @@ export default function InterviewAnalysis() {
       }
 
       const response = await res.json();
-      console.log('✅ [InterviewAnalysis] Response received:', response);
+
+      // CRITICAL: Check if this is still the latest request
+      if (requestId !== latestRequestId.current) {
+        console.warn(
+          `⚠️  [InterviewAnalysis] Ignoring stale response from request ${requestId} ` +
+          `(latest is ${latestRequestId.current})`
+        );
+        return;
+      }
+
+      console.log(`✅ [InterviewAnalysis] Response received for request ${requestId}:`, response);
 
       // Extract analysis data with safe access
       // Backend structure: {success, data: {face, voice, credibility, errors}, timestamp, report_type}
@@ -67,20 +98,32 @@ export default function InterviewAnalysis() {
       console.log("📋 Data keys:", analysisData ? Object.keys(analysisData) : 'no data');
 
       if (!analysisData) {
-        console.error('❌ [InterviewAnalysis] No analysis data in response:', response);
+        console.error(`❌ [InterviewAnalysis] No analysis data in response for request ${requestId}:`, response);
         throw new Error("Invalid response format from server");
       }
 
-      console.log('✅ [InterviewAnalysis] Analysis data extracted successfully');
+      console.log(`✅ [InterviewAnalysis] Analysis data extracted successfully for request ${requestId}`);
       if (analysisData.id) analysis.setAnalysisId(analysisData.id);
       analysis.setAnalysisSuccess(analysisData);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-      console.error("❌ [InterviewAnalysis] File analysis error:", errorMessage);
-      analysis.setAnalysisError(errorMessage);
+      // Ignore abort errors (expected when canceling previous requests)
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log(`ℹ️  [InterviewAnalysis] Request ${requestId} was cancelled`);
+        return;
+      }
+
+      // Only show error if this is still the latest request
+      if (requestId === latestRequestId.current) {
+        const errorMessage = err instanceof Error ? err.message : "Analysis failed";
+        console.error(`❌ [InterviewAnalysis] File analysis error for request ${requestId}:`, errorMessage);
+        analysis.setAnalysisError(errorMessage);
+      }
     } finally {
       if (progressInterval) clearInterval(progressInterval);
-      analysis.setIsAnalyzing(false);
+      // Only reset analyzing if this was the latest request
+      if (requestId === latestRequestId.current) {
+        analysis.setIsAnalyzing(false);
+      }
     }
   };
 

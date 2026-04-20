@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
@@ -13,6 +13,11 @@ export default function CriminalAnalysis() {
   const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const analysis = useAnalysisState();
+
+  // Request ID tracking to prevent stale data updates (race conditions)
+  const latestRequestId = useRef(0);
+  // AbortController for canceling previous requests
+  const currentController = useRef<AbortController | null>(null);
 
   const handleInputMethodSelect = (method: "upload") => {
     setInputMethod(method);
@@ -31,6 +36,21 @@ export default function CriminalAnalysis() {
       return;
     }
 
+    // Use timestamp as unique request ID for this request
+    const requestId = Date.now();
+    latestRequestId.current = requestId;
+    console.log(`🔢 [CriminalAnalysis] Starting request ${requestId}`);
+
+    // Abort any previous requests before starting new one
+    if (currentController.current) {
+      console.log(`🛑 [CriminalAnalysis] Aborting previous request`);
+      currentController.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    currentController.current = controller;
+
     analysis.setIsAnalyzing(true);
     analysis.setProgress(0);
     analysis.clearError();
@@ -43,12 +63,13 @@ export default function CriminalAnalysis() {
 
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9999/api';
       const token = localStorage.getItem('authToken');
-      console.log('📁 [CriminalAnalysis] Sending analysis request...');
+      console.log(`📁 [CriminalAnalysis] Sending analysis request (ID: ${requestId})...`);
       const res = await fetch(`${apiBase}/analyze/investigation`, {
         method: 'POST',
         body: formData,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        signal: AbortSignal.timeout(120000),
+        signal: controller.signal, // ← Pass abort signal
+        timeout: 120000,
       });
 
       if (!res.ok) {
@@ -56,7 +77,17 @@ export default function CriminalAnalysis() {
       }
 
       const response = await res.json();
-      console.log('✅ [CriminalAnalysis] Response received:', response);
+
+      // CRITICAL: Check if this is still the latest request
+      if (requestId !== latestRequestId.current) {
+        console.warn(
+          `⚠️  [CriminalAnalysis] Ignoring stale response from request ${requestId} ` +
+          `(latest is ${latestRequestId.current})`
+        );
+        return;
+      }
+
+      console.log(`✅ [CriminalAnalysis] Response received for request ${requestId}:`, response);
 
       // Extract analysis data with safe access
       // Backend structure: {success, data: {face, voice, credibility, errors}, timestamp, report_type}
@@ -65,20 +96,32 @@ export default function CriminalAnalysis() {
       console.log("📋 Data keys:", analysisData ? Object.keys(analysisData) : 'no data');
 
       if (analysisData) {
-        console.log('✅ [CriminalAnalysis] Analysis data extracted successfully');
+        console.log(`✅ [CriminalAnalysis] Analysis data extracted successfully for request ${requestId}`);
         if (analysisData.id) analysis.setAnalysisId(analysisData.id);
         analysis.setAnalysisSuccess(analysisData);
       } else {
-        console.error('❌ [CriminalAnalysis] No data in response:', response);
+        console.error(`❌ [CriminalAnalysis] No data in response for request ${requestId}:`, response);
         analysis.setAnalysisError("Analysis failed");
       }
     } catch (err) {
-      console.error('❌ [CriminalAnalysis] Error:', err);
-      analysis.setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
+      // Ignore abort errors (expected when canceling previous requests)
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log(`ℹ️  [CriminalAnalysis] Request ${requestId} was cancelled`);
+        return;
+      }
+
+      // Only show error if this is still the latest request
+      if (requestId === latestRequestId.current) {
+        console.error(`❌ [CriminalAnalysis] Error for request ${requestId}:`, err);
+        analysis.setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
+      }
     } finally {
       clearInterval(progressInterval);
-      console.log('🔚 [CriminalAnalysis] Analysis complete, setting isAnalyzing to false');
-      analysis.setIsAnalyzing(false);
+      // Only reset analyzing if this was the latest request
+      if (requestId === latestRequestId.current) {
+        console.log(`🔚 [CriminalAnalysis] Analysis complete for request ${requestId}, setting isAnalyzing to false`);
+        analysis.setIsAnalyzing(false);
+      }
     }
   };
 

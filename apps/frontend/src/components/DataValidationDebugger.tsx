@@ -10,14 +10,14 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { ChevronDown, CheckCircle, XCircle } from 'lucide-react';
 import {
   validateAnalysisResult,
   isCompleteAnalysis,
   hasPartialAnalysis,
   type ValidationResult,
 } from '../utils/analysisValidator';
-import { pipelineValidator, quickValidate } from '../utils/pipelineConsistencyValidator';
+import { quickValidate } from '../utils/pipelineConsistencyValidator';
 
 interface DataValidationDebuggerProps {
   analysisData?: Record<string, any> | null;
@@ -175,6 +175,7 @@ export default function DataValidationDebugger({
         </h3>
         <button
           onClick={() => setIsOpen(false)}
+          title="Close debugger"
           className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
         >
           <ChevronDown className="w-4 h-4" />

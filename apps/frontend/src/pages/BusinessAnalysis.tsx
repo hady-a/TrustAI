@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import InputMethodSelector from "../components/InputMethodSelector";
@@ -13,6 +13,11 @@ export default function BusinessAnalysis() {
   const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const analysis = useAnalysisState();
+
+  // Request ID tracking to prevent stale data updates (race conditions)
+  const latestRequestId = useRef(0);
+  // AbortController for canceling previous requests
+  const currentController = useRef<AbortController | null>(null);
 
   const handleInputMethodSelect = (method: "upload") => {
     setInputMethod(method);
@@ -31,6 +36,21 @@ export default function BusinessAnalysis() {
       return;
     }
 
+    // Use timestamp as unique request ID for this request
+    const requestId = Date.now();
+    latestRequestId.current = requestId;
+    console.log(`🔢 [BusinessAnalysis] Starting request ${requestId}`);
+
+    // Abort any previous requests before starting new one
+    if (currentController.current) {
+      console.log(`🛑 [BusinessAnalysis] Aborting previous request`);
+      currentController.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    currentController.current = controller;
+
     analysis.setIsAnalyzing(true);
     analysis.setProgress(0);
     analysis.clearError();
@@ -44,13 +64,14 @@ export default function BusinessAnalysis() {
       formData.append('audio', selectedFile, selectedFile.name);
 
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9999/api';
-      console.log('📁 [BusinessAnalysis] Sending file analysis request');
+      console.log(`📁 [BusinessAnalysis] Sending file analysis request (ID: ${requestId})`);
       const token = localStorage.getItem('authToken');
       const res = await fetch(`${apiBase}/analyze/business`, {
         method: 'POST',
         body: formData,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        signal: AbortSignal.timeout(120000),
+        signal: controller.signal, // ← Pass abort signal
+        timeout: 120000,
       });
 
       if (!res.ok) {
@@ -58,7 +79,18 @@ export default function BusinessAnalysis() {
       }
 
       const response = await res.json();
-      console.log('✅ [BusinessAnalysis] Response received:', response);
+
+      // CRITICAL: Check if this is still the latest request
+      // If not, ignore the response (stale data from older request)
+      if (requestId !== latestRequestId.current) {
+        console.warn(
+          `⚠️  [BusinessAnalysis] Ignoring stale response from request ${requestId} ` +
+          `(latest is ${latestRequestId.current})`
+        );
+        return;
+      }
+
+      console.log(`✅ [BusinessAnalysis] Response received for request ${requestId}:`, response);
 
       // Extract analysis data with safe access
       // Backend structure: {success, data: {face, voice, credibility, errors}, timestamp, report_type}
@@ -71,16 +103,28 @@ export default function BusinessAnalysis() {
         throw new Error("Invalid response format from server");
       }
 
-      console.log('✅ [BusinessAnalysis] Analysis data extracted successfully');
+      console.log(`✅ [BusinessAnalysis] Analysis data extracted successfully for request ${requestId}`);
       if (analysisData.id) analysis.setAnalysisId(analysisData.id);
       analysis.setAnalysisSuccess(analysisData);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-      console.error("❌ [BusinessAnalysis] File analysis error:", errorMessage);
-      analysis.setAnalysisError(errorMessage);
+      // Ignore abort errors (expected when canceling previous requests)
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log(`ℹ️  [BusinessAnalysis] Request ${requestId} was cancelled`);
+        return;
+      }
+
+      // Only show error if this is still the latest request
+      if (requestId === latestRequestId.current) {
+        const errorMessage = err instanceof Error ? err.message : "Analysis failed";
+        console.error(`❌ [BusinessAnalysis] File analysis error (request ${requestId}):`, errorMessage);
+        analysis.setAnalysisError(errorMessage);
+      }
     } finally {
       if (progressInterval) clearInterval(progressInterval);
-      analysis.setIsAnalyzing(false);
+      // Only reset analyzing if this was the latest request
+      if (requestId === latestRequestId.current) {
+        analysis.setIsAnalyzing(false);
+      }
     }
   };
 
