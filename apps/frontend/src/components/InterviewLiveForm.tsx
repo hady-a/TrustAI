@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Mic, Play, StopCircle, AlertCircle, ChevronLeft, ChevronRight, Trash2, Send } from 'lucide-react';
-import LiveAnalysisDisplay from './LiveAnalysisDisplay';
+import { Mic, StopCircle, AlertCircle, ChevronLeft, ChevronRight, Trash2, Send } from 'lucide-react';
 import { useAnswerRecorder } from '../hooks/useAnswerRecorder';
 import { useInterviewSession } from '../hooks/useInterviewSession';
 import { getQuestionsForMode, getTotalQuestions } from '../utils/interviewQuestions';

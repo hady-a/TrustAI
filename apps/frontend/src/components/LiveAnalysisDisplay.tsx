@@ -9,7 +9,6 @@ import {
   getScoreColor,
   getScoreBgColor,
   getScoreLabel,
-  getSafePercentage,
   isValidAnalysisData,
   type DataAvailability,
 } from '../utils/dataValidation';
@@ -50,13 +49,11 @@ function SafeMetricCard({
   label,
   value,
   unit = '',
-  icon = '📊',
   isBad = false,
 }: {
   label: string;
   value: any;
   unit?: string;
-  icon?: string;
   isBad?: boolean;
 }) {
   if (value === undefined || value === null || value === 'N/A') {
