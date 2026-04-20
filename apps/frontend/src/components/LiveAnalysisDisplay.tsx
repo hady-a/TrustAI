@@ -60,8 +60,7 @@ function SafeMetricCard({
     return <EmptyStateCard icon="⚠️" title={label} message="Data not available" />;
   }
 
-  const safeValue = typeof value === 'number' ? value : value;
-  const display = typeof safeValue === 'number' ? `${Math.round(safeValue)}${unit}` : String(value);
+  const display = typeof value === 'number' ? `${Math.round(value)}${unit}` : String(value);
 
   return (
     <motion.div
@@ -70,7 +69,7 @@ function SafeMetricCard({
       className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
     >
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 capitalize mb-2">{label}</p>
-      <p className={`text-lg font-bold ${isBad ? getScoreColor(safeValue as number, true) : getScoreColor(safeValue as number, false)}`}>
+      <p className={`text-lg font-bold ${isBad ? getScoreColor(value as number, true) : getScoreColor(value as number, false)}`}>
         {display}
       </p>
     </motion.div>
@@ -85,7 +84,7 @@ export default function LiveAnalysisDisplay({
   isAnalyzing,
 }: LiveAnalysisDisplayProps) {
   const [resultHistory, setResultHistory] = useState<LiveAnalysisResult[]>([]);
-  const [animatedScores, setAnimatedScores] = useState({ deception: 0, credibility: 0 });
+  const [animatedScores, setAnimatedScores] = useState({ deception: 0, credibility: 0, confidence: 0 });
   const [dataAvailability, setDataAvailability] = useState<DataAvailability | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +98,10 @@ export default function LiveAnalysisDisplay({
     if (!result.data || !isValidAnalysisData(result.data)) {
       console.warn('⚠️ [SafeLiveAnalysisDisplay] Invalid or missing data structure');
       setDataAvailability(checkDataAvailability(null));
-      setResultHistory((prev) => [...prev, result]);
+      setResultHistory((prev) => {
+        const updated = [...prev, result];
+        return updated.length > 50 ? updated.slice(-50) : updated;
+      });
       return;
     }
 
@@ -108,7 +110,14 @@ export default function LiveAnalysisDisplay({
     setDataAvailability(availability);
     console.log('📊 [SafeLiveAnalysisDisplay] Data availability:', availability);
 
-    setResultHistory((prev) => [...prev, result]);
+    setResultHistory((prev) => {
+      const updated = [...prev, result];
+      return updated.length > 50 ? updated.slice(-50) : updated;
+    });
+
+    // Track animation ID to prevent stale closures
+    let animationId: number | null = null;
+    let isMounted = true;
 
     // Only animate if we have valid complete data
     if (result.status === 'complete' && availability.hasDeceptionScore && availability.hasCredibilityScore) {
@@ -117,32 +126,49 @@ export default function LiveAnalysisDisplay({
       const startTime = Date.now();
 
       const animate = () => {
+        if (!isMounted) return;
+
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
         setAnimatedScores({
           deception: getSafeScore(result.data?.deceptionScore, 0) * progress,
           credibility: getSafeScore(result.data?.credibilityScore, 0) * progress,
+          confidence: getSafeScore(result.data?.confidence, 0, 0, 1) * 100 * progress,
         });
 
-        if (progress < 1) {
-          requestAnimationFrame(animate);
+        if (progress < 1 && isMounted) {
+          animationId = requestAnimationFrame(animate);
+        } else {
+          animationId = null;
         }
       };
 
-      animate();
+      animationId = requestAnimationFrame(animate);
     } else if (result.status === 'complete') {
       // No animation needed - just show static values
       setAnimatedScores({
         deception: getSafeScore(result.data?.deceptionScore, 0),
         credibility: getSafeScore(result.data?.credibilityScore, 0),
+        confidence: getSafeScore(result.data?.confidence, 0, 0, 1) * 100,
       });
     }
 
     // Auto-scroll
-    setTimeout(() => {
-      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const scrollTimeout = setTimeout(() => {
+      if (isMounted) {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
     }, 100);
+
+    // Cleanup: Cancel animation and clear timers to prevent stale closures
+    return () => {
+      isMounted = false;
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+      }
+      clearTimeout(scrollTimeout);
+    };
   }, [result]);
 
   // ============ EARLY GUARDS - NO DATA ============
@@ -333,14 +359,14 @@ export default function LiveAnalysisDisplay({
                 <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Confidence</p>
                 <div className="flex items-end gap-2 mb-3">
                   <motion.span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                    {Math.round(getSafeScore(result.data?.confidence, 0) * 100)}
+                    {Math.round(animatedScores.confidence)}
                   </motion.span>
                   <span className="text-sm text-gray-600 dark:text-gray-400 mb-1">%</span>
                 </div>
                 <div className="w-full h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${Math.round(getSafeScore(result.data?.confidence, 0) * 100)}%` }}
+                    animate={{ width: `${animatedScores.confidence}%` }}
                     transition={{ duration: 1.2, ease: 'easeOut' }}
                     className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
                   />

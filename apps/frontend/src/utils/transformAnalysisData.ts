@@ -99,12 +99,10 @@ export function transformAnalysisData(apiResponse: any): AnalysisData {
     behavioralSignals,
     summary,
     metrics: {
-      credibility_score: credibilityScore ?? 'N/A',
-      confidence_level: confidenceLevel ?? 'N/A',
-      risk_level: riskLevelRaw || 'N/A',
       voice_stress: stressLevel ?? 'N/A',
       voice_emotion: emotion ?? 'N/A',
       transcription: transcript || '(No data)',
+      risk_level: riskLevelRaw || 'N/A',
     },
     insights: [
       recommendation || 'Analysis complete',
