@@ -73,6 +73,19 @@ def analyze():
     """
     try:
         report_type = request.form.get('report_type', 'general')
+        return run_complete_analysis(report_type)
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Analysis failed: {str(e)}',
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+
+def run_complete_analysis(report_type):
+    """Shared complete analysis logic for mode-specific endpoints."""
+    try:
         
         # Validate report type
         valid_types = ['general', 'hr', 'criminal', 'business']
@@ -148,6 +161,42 @@ def analyze():
             'error': f'Analysis failed: {str(e)}',
             'timestamp': datetime.now().isoformat()
         }), 500
+
+
+@app.route('/analyze/business', methods=['POST'])
+def analyze_business_mode():
+    """Business endpoint expected by backend service."""
+    return run_complete_analysis('business')
+
+
+@app.route('/analyze/interview', methods=['POST'])
+def analyze_interview_mode():
+    """Interview endpoint expected by backend service."""
+    return run_complete_analysis('hr')
+
+
+@app.route('/analyze/investigation', methods=['POST'])
+def analyze_investigation_mode():
+    """Investigation endpoint expected by backend service."""
+    return run_complete_analysis('criminal')
+
+
+@app.route('/api/analyze/business', methods=['POST'])
+def analyze_business_mode_api():
+    """Business endpoint alias with /api prefix."""
+    return run_complete_analysis('business')
+
+
+@app.route('/api/analyze/interview', methods=['POST'])
+def analyze_interview_mode_api():
+    """Interview endpoint alias with /api prefix."""
+    return run_complete_analysis('hr')
+
+
+@app.route('/api/analyze/investigation', methods=['POST'])
+def analyze_investigation_mode_api():
+    """Investigation endpoint alias with /api prefix."""
+    return run_complete_analysis('criminal')
 
 
 @app.route('/api/analyze/face', methods=['POST'])
@@ -418,6 +467,9 @@ def get_status():
         'endpoints': {
             'health': 'GET /health',
             'analyze_complete': 'POST /api/analyze',
+            'analyze_business': 'POST /analyze/business',
+            'analyze_interview': 'POST /analyze/interview',
+            'analyze_investigation': 'POST /analyze/investigation',
             'analyze_face': 'POST /api/analyze/face',
             'analyze_voice': 'POST /api/analyze/voice',
             'analyze_credibility': 'POST /api/analyze/credibility',

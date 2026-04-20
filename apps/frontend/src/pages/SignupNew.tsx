@@ -115,8 +115,8 @@ export default function SignupNew() {
 
         setIsLoading(false)
         showToast('success', '✅ Google signup successful!')
-        console.log('[Google] 🚀 Navigating to /modes')
-        navigate('/modes', { replace: true })
+        console.log('[Google] 🚀 Navigating to /profile')
+        navigate('/profile', { replace: true })
       } else {
         throw new Error('Invalid response from server')
       }

@@ -9,8 +9,10 @@ interface CardProps {
   style?: React.CSSProperties
 }
 
+type CardDivProps = React.HTMLAttributes<HTMLDivElement>
+
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className = '', variant = 'default', hoverEffect = false, children, style }, ref) => {
+  ({ className = '', variant = 'default', hoverEffect = false, children, style, ...props }, ref) => {
     const baseClasses = 'rounded-xl backdrop-blur-sm transition-all duration-300'
     
     const variantClasses = {
@@ -31,6 +33,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
         ref={ref}
         style={style}
         className={`${baseClasses} ${variantClasses[variant]} ${className}`}
+        {...(props as CardDivProps)}
         {...motionProps}
       >
         {children}

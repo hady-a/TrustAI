@@ -29,9 +29,9 @@ class BusinessAnalysisService {
   private timeout: number;
 
   constructor() {
-    // Use AI_SERVICE_URL from .env (http://localhost:8000)
+    // Use FLASK_URL from .env
     this.flaskBaseURL =
-      process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      process.env.FLASK_URL || 'http://localhost:8000';
     this.timeout = 60000; // 60 seconds timeout for processing
 
     this.client = axios.create({
@@ -194,19 +194,21 @@ class BusinessAnalysisService {
 
       const processingTime = Date.now() - startTime;
 
+      // Log raw Flask response for debugging and verification
+      console.log("🔍 RAW FLASK RESPONSE:", response.data);
+
       logger.info(
         {
           processingTime,
           statusCode: response.status,
           success: response.data.success,
+          dataKeys: Object.keys(response.data),
         },
         '[Flask Business Analysis] Analysis completed successfully'
       );
 
-      return {
-        success: true,
-        data: response.data.data || response.data,
-      };
+      // Return Flask response exactly as received (transparent proxy)
+      return response.data;
     } catch (error) {
       const err = error as Error;
       const processingTime = Date.now() - startTime;

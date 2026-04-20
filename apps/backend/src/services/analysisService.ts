@@ -3,10 +3,10 @@ import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
 
-const FLASK_API_URL = process.env.FLASK_API_URL || 'http://localhost:5000';
+const FLASK_API_URL = process.env.FLASK_URL || 'http://localhost:8000';
 
 interface AnalysisRequest {
-  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW';
+  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION';
   audioPath?: string;
   videoPath?: string;
   videoBlob?: Buffer;
@@ -25,23 +25,39 @@ interface AnalysisResponse {
   timestamp: string;
 }
 
+type FlaskRouteMode = 'business' | 'interview' | 'investigation';
+type FlaskAnalyzeEndpoint = `/analyze/${FlaskRouteMode}`;
+
+const getFlaskModeSegment = (
+  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION'
+): FlaskRouteMode => {
+  // Keep backward compatibility with older CRIMINAL mode naming.
+  if (mode === 'CRIMINAL') return 'investigation';
+  return mode.toLowerCase() as FlaskRouteMode;
+};
+
+const getFlaskEndpointForMode = (
+  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION'
+): FlaskAnalyzeEndpoint => `/analyze/${getFlaskModeSegment(mode)}`;
+
 export class AnalysisService {
   /**
    * Send blobs to Flask for analysis
    */
   async analyzeFromBlobs(
-    mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW',
+    mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION',
     videoBlob: Buffer,
     audioBlob: Buffer
   ): Promise<AnalysisResponse> {
     try {
+      const endpoint = getFlaskEndpointForMode(mode);
       const formData = new FormData();
       formData.append('mode', mode);
       formData.append('video', videoBlob, 'recording.webm');
       formData.append('audio', audioBlob, 'audio.wav');
 
       const response = await axios.post(
-        `${FLASK_API_URL}/api/analyze/blob`,
+        `${FLASK_API_URL}${endpoint}`,
         formData,
         {
           headers: formData.getHeaders(),
@@ -59,16 +75,17 @@ export class AnalysisService {
    * Send file path to Flask for analysis
    */
   async analyzeFromFile(
-    mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW',
+    mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION',
     filePath: string
   ): Promise<AnalysisResponse> {
     try {
+      const endpoint = getFlaskEndpointForMode(mode);
       const formData = new FormData();
       formData.append('mode', mode);
-      formData.append('file', fs.createReadStream(filePath));
+      formData.append('audio', fs.createReadStream(filePath), path.basename(filePath));
 
       const response = await axios.post(
-        `${FLASK_API_URL}/api/analyze/file`,
+        `${FLASK_API_URL}${endpoint}`,
         formData,
         {
           headers: formData.getHeaders(),

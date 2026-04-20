@@ -103,18 +103,19 @@ export function useMicrophoneStream(wsUrl: string = 'ws://localhost:8080') {
                 // Transform partial result data
                 const partialData = message.result;
                 const partialTransformed = {
-                  deceptionScore: partialData?.credibility?.lie_probability || 0,
-                  credibilityScore: 100 - (partialData?.credibility?.lie_probability || 0),
-                  confidence: (partialData?.credibility?.confidence || 0) / 100,
+                  deceptionScore: Math.max(0, 100 - (partialData?.credibility?.credibility_score || 50)),
+                  credibilityScore: partialData?.credibility?.credibility_score || 50,
+                  confidence: (partialData?.credibility?.confidence_level || 0) / 100,
                   metrics: {
-                    lie_probability: partialData?.credibility?.lie_probability,
-                    credibility_confidence: partialData?.credibility?.confidence,
+                    credibility_score: partialData?.credibility?.credibility_score,
+                    confidence_level: partialData?.credibility?.confidence_level,
+                    risk_level: partialData?.credibility?.risk_level,
                     voice_stress: partialData?.voice?.stress?.stress_level,
                     voice_emotion: partialData?.voice?.emotion?.emotion,
                     transcription: partialData?.voice?.transcription?.transcript || '(Processing...)',
                   },
                   insights: [
-                    partialData?.credibility?.analysis || 'Analyzing deception indicators',
+                    partialData?.credibility?.recommendation || 'Analyzing behavioral signals',
                     `Voice emotion: ${partialData?.voice?.emotion?.emotion || 'Detecting...'}`,
                     `Stress level: ${partialData?.voice?.stress?.stress_level || 0}/100`,
                   ],
@@ -147,18 +148,19 @@ export function useMicrophoneStream(wsUrl: string = 'ws://localhost:8080') {
               console.log('   Flask analysis object:', flaskData?.analysis);
 
               const transformedData = {
-                deceptionScore: flaskData?.analysis?.credibility?.lie_probability || 0,
-                credibilityScore: 100 - (flaskData?.analysis?.credibility?.lie_probability || 0),
-                confidence: (flaskData?.analysis?.credibility?.confidence || 0) / 100,
+                deceptionScore: Math.max(0, 100 - (flaskData?.analysis?.credibility?.credibility_score || 50)),
+                credibilityScore: flaskData?.analysis?.credibility?.credibility_score || 50,
+                confidence: (flaskData?.analysis?.credibility?.confidence_level || 0) / 100,
                 metrics: {
-                  lie_probability: flaskData?.analysis?.credibility?.lie_probability,
-                  credibility_confidence: flaskData?.analysis?.credibility?.confidence,
+                  credibility_score: flaskData?.analysis?.credibility?.credibility_score,
+                  confidence_level: flaskData?.analysis?.credibility?.confidence_level,
+                  risk_level: flaskData?.analysis?.credibility?.risk_level,
                   voice_stress: flaskData?.analysis?.voice?.stress?.stress_level,
                   voice_emotion: flaskData?.analysis?.voice?.emotion?.emotion,
                   transcription: flaskData?.analysis?.voice?.transcription?.transcript || '(Silent)',
                 },
                 insights: [
-                  flaskData?.analysis?.credibility?.analysis || 'No deception indicators detected',
+                  flaskData?.analysis?.credibility?.recommendation || 'No elevated behavioral signals detected',
                   `Voice emotion: ${flaskData?.analysis?.voice?.emotion?.emotion || 'Unknown'}`,
                   `Stress level: ${flaskData?.analysis?.voice?.stress?.stress_level || 0}/100`,
                 ],

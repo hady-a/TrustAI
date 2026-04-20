@@ -6,6 +6,8 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts"
 import { useServiceWorker } from "./hooks/useServiceWorker"
 import { ThemeProvider } from "./contexts/ThemeContext"
 import { NotificationsProvider } from "./contexts/NotificationsContext"
+import { OnboardingProvider } from "./contexts/OnboardingContext"
+import { OfflineProvider } from "./contexts/OfflineContext"
 import MainLayout from "./layouts/MainLayout"
 import PublicLayout from "./layouts/PublicLayout"
 import AdminLayout from "./layouts/AdminLayout"
@@ -54,6 +56,7 @@ function AppRoutes() {
         {/* Authenticated Routes with Navbar */}
         <Route path="/profile" element={<MainLayout><UserProfile /></MainLayout>} />
         <Route path="/modes" element={<MainLayout><ModeSelectionNew /></MainLayout>} />
+        <Route path="/selectmodes" element={<MainLayout><ModeSelectionNew /></MainLayout>} />
         <Route path="/upload" element={<MainLayout><UploadAnalysis /></MainLayout>} />
         <Route path="/analysis/criminal" element={<MainLayout><CriminalAnalysis /></MainLayout>} />
         <Route path="/analysis/interview" element={<MainLayout><InterviewAnalysis /></MainLayout>} />
@@ -82,11 +85,15 @@ export default function App() {
   return (
     <GoogleOAuthProvider clientId={googleClientId}>
       <ThemeProvider>
-        <NotificationsProvider>
-          <Router>
-            <AppRoutes />
-          </Router>
-        </NotificationsProvider>
+        <OfflineProvider>
+          <OnboardingProvider>
+            <NotificationsProvider>
+              <Router>
+                <AppRoutes />
+              </Router>
+            </NotificationsProvider>
+          </OnboardingProvider>
+        </OfflineProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>
   )

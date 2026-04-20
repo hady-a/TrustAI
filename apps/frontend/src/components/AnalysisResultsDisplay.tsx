@@ -139,7 +139,7 @@ export default function AnalysisResultsDisplay({ result }: { result?: AnalysisRe
                 <div className="flex items-center justify-between mb-2">
                   <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                     <CheckCircle2 size={16} className="text-red-600" />
-                    Deception Indicators
+                    Behavioral Signals
                   </span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">
                     {sampleResult.deceptionIndicators}

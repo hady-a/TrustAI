@@ -6,13 +6,14 @@ import { Button } from '../components/UI/Button'
 import { Card } from '../components/UI/Card'
 
 export default function ModeSelectionNew() {
+  console.log('[ModeSelectionNew] Component rendering')
   const navigate = useNavigate()
   const [selectedMode, setSelectedMode] = useState<string | null>(null)
   const [hoveredMode, setHoveredMode] = useState<string | null>(null)
 
   const modes = useMemo(() => [
     {
-      id: 'CRIMINAL',
+      id: 'INVESTIGATION',
       name: 'Criminal Investigation',
       description: 'Analyze suspects and detect deception signals',
       longDescription: 'Advanced behavioral analysis for criminal investigations. Detect deception signals, identify inconsistencies in speech patterns, and uncover hidden intentions.',
@@ -51,7 +52,7 @@ export default function ModeSelectionNew() {
         sessionStorage.setItem('selectedModeValue', selectedMode)
 
         const routes: Record<string, string> = {
-          CRIMINAL: '/analysis/criminal',
+          INVESTIGATION: '/analysis/criminal',
           INTERVIEW: '/analysis/interview',
           BUSINESS: '/analysis/business',
         }
@@ -80,6 +81,9 @@ export default function ModeSelectionNew() {
       transition: { duration: 0.4 },
     },
   }
+
+  console.log('[ModeSelectionNew] Modes:', modes)
+  console.log('[ModeSelectionNew] Selected mode:', selectedMode)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-purple-50 to-gray-100 dark:from-gray-950 dark:via-purple-950/20 dark:to-gray-950 py-12 px-4">
@@ -180,7 +184,7 @@ export default function ModeSelectionNew() {
                     animate={{ opacity: isSelected || isHovered ? 1 : 0.3 }}
                   >
                     <motion.div
-                      className={`h-1 rounded-full ${`bg-gradient-to-r ${mode.gradient}`}`}
+                      className={`h-1 rounded-full bg-gradient-to-r ${mode.gradient}`}
                       initial={{ width: 0 }}
                       animate={{ width: isSelected ? '100%' : isHovered ? '60%' : '0%' }}
                       transition={{ type: 'spring', stiffness: 300, damping: 30 }}

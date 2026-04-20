@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { flaskAIService } from '../services/flask.ai.service';
 import { logger } from '../config/logger';
+import { ensureWAVFormat, getAudioInfo, isValidAudioFile } from '../utils/audioConverter';
 
 /**
  * Business Analysis Route
@@ -99,131 +100,234 @@ const multerErrorHandler = (
 
 /**
  * POST /analyze/business
- * Analyzes business data using Flask AI service
- *
- * Form fields:
- * - audio (required): audio file
- * - image (optional): image file
- * - text (optional): text input
  */
 router.post(
   '/analyze/business',
-  upload.fields([
-    { name: 'audio', maxCount: 1 },
-    { name: 'image', maxCount: 1 },
-  ]),
+  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }]),
+  multerErrorHandler,
+  createAnalyzeHandler('BUSINESS')
+);
+
+/**
+ * Shared handler factory for mode-specific analysis routes.
+ * All modes use the same Flask endpoint; mode is forwarded as a FormData field.
+ * Audio is automatically converted to WAV format for Flask/librosa compatibility.
+ */
+function createAnalyzeHandler(mode: 'BUSINESS' | 'INTERVIEW' | 'INVESTIGATION') {
+  return async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    let audioPath: string | undefined;
+    let convertedAudioPath: string | undefined;
+    let imagePath: string | undefined;
+
+    try {
+      const files = req.files as any;
+      const { text } = req.body;
+
+      logger.info({ mode, hasAudio: !!files?.audio, hasImage: !!files?.image }, `📥 ${mode} analyze request received`);
+
+      if (!files?.audio || files.audio.length === 0) {
+        logger.warn(`❌ Missing required audio file for ${mode}`);
+        return res.status(400).json({ success: false, error: 'Audio file is required' });
+      }
+
+      audioPath = files.audio[0].path;
+      imagePath = files.image?.[0].path;
+
+      // Validate and convert audio to WAV format for Flask/librosa compatibility
+      const isValid = await isValidAudioFile(audioPath);
+      if (!isValid) {
+        logger.warn({ audioPath }, `⚠️  Invalid audio file for ${mode}`);
+        return res.status(400).json({ success: false, error: 'Invalid audio file format' });
+      }
+
+      convertedAudioPath = await ensureWAVFormat(audioPath);
+      const audioInfo = await getAudioInfo(convertedAudioPath);
+
+      if (audioInfo) {
+        logger.info(
+          { duration: audioInfo.duration, sampleRate: audioInfo.sampleRate },
+          `📊 ${mode} audio info`
+        );
+      }
+
+      // Forward converted WAV to Flask
+      const result = await flaskAIService.analyze({
+        audioPath: convertedAudioPath,
+        imagePath,
+        textInput: text,
+        mode,
+      });
+
+      if (!result.success) {
+        logger.error({ error: result.error }, `❌ Flask analysis failed for ${mode}`);
+        return res.status(400).json({ success: false, error: result.error || 'Analysis failed' });
+      }
+
+      const processingTime = Date.now() - startTime;
+      logger.info({ processingTime, confidence: result.confidence }, `✅ ${mode} analysis completed`);
+
+      return res.status(200).json({ success: true, data: result, processingTime });
+    } catch (error) {
+      const err = error as Error;
+      logger.error({ error: err.message, stack: err.stack }, `❌ ${mode} route error`);
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    } finally {
+      try {
+        // Clean up original audio file
+        if (audioPath && audioPath !== convertedAudioPath && (await fs.pathExists(audioPath))) {
+          await fs.remove(audioPath);
+          logger.debug({ audioPath }, '🗑️  Cleaned up original audio');
+        }
+        // Clean up converted audio file
+        if (convertedAudioPath && (await fs.pathExists(convertedAudioPath))) {
+          await fs.remove(convertedAudioPath);
+          logger.debug({ convertedAudioPath }, '🗑️  Cleaned up converted audio');
+        }
+        // Clean up image file
+        if (imagePath && (await fs.pathExists(imagePath))) {
+          await fs.remove(imagePath);
+          logger.debug({ imagePath }, '🗑️  Cleaned up image');
+        }
+      } catch (cleanupError) {
+        logger.warn({ error: (cleanupError as Error).message }, '⚠️ Error during cleanup');
+      }
+    }
+  };
+}
+
+/**
+ * POST /analyze/interview
+ */
+router.post(
+  '/analyze/interview',
+  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }]),
+  multerErrorHandler,
+  createAnalyzeHandler('INTERVIEW')
+);
+
+/**
+ * POST /analyze/investigation
+ */
+router.post(
+  '/analyze/investigation',
+  upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'image', maxCount: 1 }]),
+  multerErrorHandler,
+  createAnalyzeHandler('INVESTIGATION')
+);
+
+/**
+ * POST /analyze/live
+ * Handle live audio chunks (2-3 second segments)
+ * Accepts smaller audio chunks for real-time analysis with lower latency
+ * Automatically converts to WAV format if needed
+ */
+router.post(
+  '/analyze/live',
+  upload.single('audio'),
   multerErrorHandler,
   async (req: Request, res: Response) => {
     const startTime = Date.now();
     let audioPath: string | undefined;
-    let imagePath: string | undefined;
+    let convertedAudioPath: string | undefined;
 
     try {
-      // Extract request data
-      const files = req.files as any;
-      const { text } = req.body;
+      const file = req.file;
+      const { mode = 'BUSINESS' } = req.body;
 
-      // Log request
-      logger.info(
-        {
-          hasAudio: !!files?.audio,
-          hasImage: !!files?.image,
-          hasText: !!text,
-        },
-        '📥 Analyze request received'
-      );
+      logger.info({ mode, audioSize: file?.size }, '📹 Live chunk received');
 
-      // Validate audio file (required)
-      if (!files?.audio || files.audio.length === 0) {
-        logger.warn('❌ Missing required audio file');
+      if (!file) {
+        logger.warn('❌ Missing audio chunk');
+        return res.status(400).json({ success: false, error: 'Audio chunk is required' });
+      }
+
+      // Validate mode is one of the allowed values
+      const validModes = ['BUSINESS', 'INTERVIEW', 'INVESTIGATION'];
+      if (!validModes.includes(mode)) {
+        logger.warn({ providedMode: mode }, `❌ Invalid mode: ${mode}`);
         return res.status(400).json({
           success: false,
-          error: 'Audio file is required',
+          error: `Invalid mode. Must be one of: ${validModes.join(', ')}`,
         });
       }
 
-      // Get file paths
-      audioPath = files.audio[0].path;
-      imagePath = files.image?.[0].path;
+      audioPath = file.path;
 
-      logger.debug(
-        {
-          audioSize: files.audio[0].size,
-          imageSize: files.image?.[0].size,
-          audioPath,
-          imagePath,
-        },
-        '📂 Files uploaded'
-      );
+      // Validate audio file
+      const isValid = await isValidAudioFile(audioPath);
+      if (!isValid) {
+        logger.warn({ audioPath }, '⚠️  Invalid audio file format');
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid audio file format',
+        });
+      }
 
-      // Call Flask AI service
-      logger.info('🚀 Calling Flask AI service...');
+      // Convert to WAV format if needed
+      convertedAudioPath = await ensureWAVFormat(audioPath);
+      const audioInfo = await getAudioInfo(convertedAudioPath);
+
+      if (audioInfo) {
+        logger.info(
+          { duration: audioInfo.duration, sampleRate: audioInfo.sampleRate },
+          '📊 Audio info'
+        );
+      }
+
+      // Forward to Flask with mode parameter
       const result = await flaskAIService.analyze({
-        audioPath,
-        imagePath,
-        textInput: text,
-        mode: 'BUSINESS',
+        audioPath: convertedAudioPath,
+        imagePath: undefined,
+        textInput: undefined,
+        mode: mode as 'BUSINESS' | 'INTERVIEW' | 'INVESTIGATION',
       });
 
       if (!result.success) {
-        logger.error(
-          { error: result.error },
-          '❌ Flask analysis failed'
-        );
-        return res.status(400).json({
-          success: false,
-          error: result.error || 'Analysis failed',
+        logger.warn({ error: result.error }, `⚠️ Live chunk analysis returned partial result`);
+        // For live analysis, we still return success even with partial results
+        return res.status(200).json({
+          success: true,
+          data: result,
+          processingTime: Date.now() - startTime,
+          insights: result.insights || 'Processing...',
         });
       }
 
       const processingTime = Date.now() - startTime;
-      logger.info(
-        {
-          processingTime,
-          confidence: result.confidence,
-          trustScore: result.trustScore,
-        },
-        '✅ Analysis completed successfully'
-      );
+      logger.info({ processingTime, mode }, `✅ Live chunk analyzed`);
 
-      // Return result
       return res.status(200).json({
         success: true,
         data: result,
         processingTime,
+        insights: result.insights || 'Analysis complete',
       });
     } catch (error) {
       const err = error as Error;
-      const processingTime = Date.now() - startTime;
-
-      logger.error(
-        {
-          error: err.message,
-          stack: err.stack,
-          processingTime,
-        },
-        '❌ Route error'
-      );
-
-      return res.status(500).json({
-        success: false,
-        error: err.message || 'Internal server error',
+      logger.error({ error: err.message }, '❌ Live analysis error');
+      // Don't fail the request on error; send partial response
+      return res.status(200).json({
+        success: true,
+        error: err.message,
+        insights: 'Error processing chunk, will retry',
       });
     } finally {
-      // Always cleanup files
       try {
-        if (audioPath && fs.existsSync(audioPath)) {
-          logger.debug({ audioPath }, '🗑️ Cleaning up audio file');
+        // Clean up original audio file
+        if (audioPath && audioPath !== convertedAudioPath && (await fs.pathExists(audioPath))) {
           await fs.remove(audioPath);
+          logger.debug({ audioPath }, '🗑️  Cleaned up original audio');
         }
-        if (imagePath && fs.existsSync(imagePath)) {
-          logger.debug({ imagePath }, '🗑️ Cleaning up image file');
-          await fs.remove(imagePath);
+        // Clean up converted audio file
+        if (convertedAudioPath && (await fs.pathExists(convertedAudioPath))) {
+          await fs.remove(convertedAudioPath);
+          logger.debug({ convertedAudioPath }, '🗑️  Cleaned up converted audio');
         }
       } catch (cleanupError) {
         logger.warn(
           { error: (cleanupError as Error).message },
-          '⚠️ Error during cleanup'
+          '⚠️  Error cleaning up audio files'
         );
       }
     }

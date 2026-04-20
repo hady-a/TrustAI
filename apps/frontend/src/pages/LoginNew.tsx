@@ -39,7 +39,7 @@ export default function LoginNew() {
     try {
       const response = await api.get('/users/profile')
       if (response.data?.success) {
-        navigate('/modes', { replace: true })
+        navigate('/selectmodes', { replace: true })
       }
     } catch (error) {
       localStorage.removeItem('authToken')
@@ -94,7 +94,7 @@ export default function LoginNew() {
         }
 
         showToast('success', 'Login successful!')
-        setTimeout(() => navigate('/modes', { replace: true }), 1000)
+        setTimeout(() => navigate('/selectmodes', { replace: true }), 1000)
       }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Login failed. Please try again.'
@@ -130,8 +130,8 @@ export default function LoginNew() {
 
         setIsLoading(false)
         showToast('success', '✅ Google login successful!')
-        console.log('[Google] 🚀 Navigating to /modes')
-        navigate('/modes', { replace: true })
+        console.log('[Google] 🚀 Navigating to /selectmodes')
+        navigate('/selectmodes', { replace: true })
       } else {
         throw new Error('Invalid response from server')
       }

@@ -57,7 +57,7 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
         onDrop={handleDrop}
         onClick={handleClick}
         whileHover={{ scale: 1.02 }}
-        className={`relative overflow-hidden rounded-3xl p-12 text-center cursor-pointer transition-all duration-300 border-2 group ${
+        className={`relative overflow-hidden rounded-2xl sm:rounded-3xl p-8 sm:p-12 text-center cursor-pointer transition-all duration-300 border-2 group ${
           isDragging
             ? "border-indigo-500 bg-gradient-to-br from-indigo-500/20 to-purple-500/20"
             : "border-dashed border-indigo-500/40 hover:border-indigo-500/70 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 hover:from-indigo-500/10 hover:to-purple-500/10"
@@ -77,6 +77,7 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
           type="file"
           onChange={handleFileInputChange}
           accept=".mp4,.wav,.mp3,.pdf,.txt,.doc,.docx"
+          aria-label="Select file to upload"
           className="hidden"
         />
 
@@ -85,14 +86,14 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
           <motion.div
             animate={{ y: isDragging ? -15 : 0, rotate: isDragging ? 10 : 0 }}
             transition={{ type: "spring", stiffness: 300 }}
-            className="mb-6"
+            className="mb-4 sm:mb-6"
           >
             <motion.div
               animate={{ scale: isDragging ? 1.2 : 1 }}
-              className="inline-block p-4 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-3xl"
+              className="inline-block p-2 sm:p-4 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-2xl sm:rounded-3xl"
             >
               <svg
-                className={`w-20 h-20 ${
+                className={`w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 ${
                   isDragging ? "text-indigo-400" : "text-indigo-400/70 group-hover:text-indigo-400"
                 } transition-colors`}
                 fill="none"
@@ -115,9 +116,9 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-            <h3 className="text-2xl font-bold text-white mb-3">
+            <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 sm:mb-3 leading-tight">
               {selectedFile ? (
-                <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent break-words">
                   {selectedFile.name}
                 </span>
               ) : (
@@ -127,7 +128,7 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
                 </>
               )}
             </h3>
-            <p className="text-gray-400 mb-3">
+            <p className="text-gray-400 text-xs sm:text-sm md:text-base mb-3 sm:mb-4 leading-relaxed">
               {selectedFile
                 ? "Ready for analysis"
                 : "Supports MP4, WAV, MP3, PDF, TXT, DOC, DOCX"}
@@ -139,7 +140,7 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="inline-block mt-4 px-4 py-2 bg-indigo-500/20 rounded-full text-indigo-300 text-sm font-medium"
+              className="inline-block mt-3 sm:mt-4 px-3 sm:px-4 py-1.5 sm:py-2 bg-indigo-500/20 rounded-full text-indigo-300 text-xs sm:text-sm font-medium"
             >
               {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
             </motion.div>
@@ -150,7 +151,7 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-4 text-indigo-300 font-semibold flex items-center justify-center gap-2"
+              className="mt-3 sm:mt-4 text-indigo-300 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2"
             >
               <motion.span animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity }}>
                 ↓
@@ -170,16 +171,16 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ type: "spring", stiffness: 200 }}
-          className="mt-8 p-6 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-2xl backdrop-blur-sm"
+          className="mt-6 sm:mt-8 p-4 sm:p-6 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-lg sm:rounded-2xl backdrop-blur-sm"
         >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4">
+            <div className="flex items-start gap-3 sm:gap-4">
               <motion.div
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
-                className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0"
+                className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0"
               >
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path
                     fillRule="evenodd"
                     d="M8 16.5a.5.5 0 01-.5-.5v-5.19l-1.841-1.841A.5.5 0 108.341 7.659L10 9.318l1.659-1.659a.5.5 0 01.707.707L10.707 10h.586a.5.5 0 01.5.5V16a.5.5 0 01-1 0v-5H8.5V16a.5.5 0 01-.5.5z"
@@ -188,8 +189,8 @@ export default function FileUploader({ onFileSelect }: FileUploaderProps) {
                 </svg>
               </motion.div>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold truncate">{selectedFile.name}</p>
-                <p className="text-indigo-300/70 text-sm mt-1">
+                <p className="text-white font-semibold text-sm sm:text-base truncate">{selectedFile.name}</p>
+                <p className="text-indigo-300/70 text-xs sm:text-sm mt-1">
                   Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • Type: {selectedFile.type || "Unknown"}
                 </p>
               </div>

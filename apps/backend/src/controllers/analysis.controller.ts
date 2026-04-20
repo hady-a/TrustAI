@@ -15,6 +15,7 @@ import { files } from '../db/schema/files';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../lib/AppError';
 import { logger } from '../lib/logger';
+import { flaskAIService } from '../services/flask.ai.service';
 
 export class AnalysisController {
   /**
@@ -134,14 +135,22 @@ export class AnalysisController {
 
       // Process uploaded files
       const uploadedFiles = [];
+      let audioPath: string | undefined;
+      let imagePath: string | undefined;
       for (const file of req.files) {
         try {
+          // Determine file type from MIME type
+          let fileType: 'VIDEO' | 'AUDIO' | 'TEXT';
+          if (file.mimetype.startsWith('audio/')) {
+            fileType = 'AUDIO';
+          } else if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('image/')) {
+            fileType = 'VIDEO';
+          } else {
+            fileType = 'TEXT';
+          }
+
           // Validate file
-          const validation = FileService.validateFile(
-            file.mimetype,
-            file.size,
-            file.fieldname as 'VIDEO' | 'AUDIO' | 'TEXT'
-          );
+          const validation = FileService.validateFile(file.mimetype, file.size, fileType);
 
           if (!validation.valid) {
             await AnalysisLogService.warn(newAnalysis.id, userId, 'Invalid file validation', {
@@ -158,6 +167,10 @@ export class AnalysisController {
             file.originalname
           );
 
+          // Track audio/image paths for Flask
+          if (fileType === 'AUDIO') audioPath = filePath;
+          else if (fileType === 'VIDEO') imagePath = filePath;
+
           // Create file record in database
           const fileRecord = await FileService.createFileRecord({
             analysisId: newAnalysis.id,
@@ -165,7 +178,7 @@ export class AnalysisController {
             mimeType: file.mimetype,
             filePath,
             size: file.size,
-            fileType: file.fieldname as 'VIDEO' | 'AUDIO' | 'TEXT',
+            fileType,
             metadata: {
               uploadedAt: new Date().toISOString(),
             },
@@ -189,26 +202,45 @@ export class AnalysisController {
         }
       }
 
-      // Update analysis to QUEUED
-      await db
+      if (!audioPath) {
+        throw new AppError('An audio file is required for analysis', 400, 'MISSING_AUDIO_FILE');
+      }
+
+      // Call Flask AI service synchronously
+      logger.info({ analysisId: newAnalysis.id, userId }, 'Sending files to Flask AI service');
+
+      const flaskResult = await flaskAIService.analyze({
+        audioPath,
+        imagePath,
+        mode: (modes?.[0] as 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION') || 'BUSINESS',
+      });
+
+      const finalStatus = flaskResult.success ? 'COMPLETED' : 'FAILED';
+
+      // Persist result and update status
+      const [completedAnalysis] = await db
         .update(analyses)
-        .set({ status: 'QUEUED' })
-        .where(eq(analyses.id, newAnalysis.id));
+        .set({
+          status: finalStatus,
+          results: flaskResult as any,
+          confidenceLevel: String(flaskResult.confidence ?? 0),
+          overallRiskScore: Math.round((flaskResult.trustScore ?? 0) * 100),
+        })
+        .where(eq(analyses.id, newAnalysis.id))
+        .returning();
 
       await db.insert(analysisStatusHistory).values({
         analysisId: newAnalysis.id,
         oldStatus: 'UPLOADED',
-        newStatus: 'QUEUED',
+        newStatus: finalStatus,
       });
 
-      // Log status transition
-      await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis status changed', {
-        from: 'UPLOADED',
-        to: 'QUEUED',
+      await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis completed', {
+        status: finalStatus,
+        confidence: flaskResult.confidence,
         fileCount: uploadedFiles.length,
       });
 
-      // Log the action
       await AuditService.log(userId, 'CREATE_ANALYSIS', {
         analysisId: newAnalysis.id,
         modes,
@@ -217,16 +249,17 @@ export class AnalysisController {
       });
 
       logger.info(
-        { analysisId: newAnalysis.id, userId, fileCount: uploadedFiles.length },
-        'Analysis created with file uploads'
+        { analysisId: newAnalysis.id, userId, status: finalStatus },
+        'Analysis completed synchronously'
       );
 
-      return res.status(201).json({
+      return res.status(200).json({
         success: true,
-        message: 'Analysis created with files queued for processing',
+        message: 'Analysis completed successfully',
         data: {
-          analysis: newAnalysis,
+          analysis: completedAnalysis,
           files: uploadedFiles,
+          result: flaskResult,
         },
       });
     } catch (error: any) {

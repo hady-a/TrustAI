@@ -14,7 +14,7 @@ export interface AIAnalysisRequest {
   audioPath?: string;
   imagePath?: string;
   textInput?: string;
-  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW';
+  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION';
 }
 
 export interface AIAnalysisResult {
@@ -47,6 +47,21 @@ export interface AIAnalysisResult {
   error?: string;
 }
 
+type FlaskRouteMode = 'business' | 'interview' | 'investigation';
+type FlaskAnalyzeEndpoint = `/analyze/${FlaskRouteMode}`;
+
+const getFlaskModeSegment = (
+  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION'
+): FlaskRouteMode => {
+  // Keep backward compatibility with older CRIMINAL mode naming.
+  if (mode === 'CRIMINAL') return 'investigation';
+  return mode.toLowerCase() as FlaskRouteMode;
+};
+
+const getFlaskEndpointForMode = (
+  mode: 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION'
+): FlaskAnalyzeEndpoint => `/analyze/${getFlaskModeSegment(mode)}`;
+
 class FlaskAIService {
   private client: AxiosInstance;
   private baseURL: string;
@@ -54,7 +69,7 @@ class FlaskAIService {
   private maxRetries: number;
 
   constructor() {
-    this.baseURL = process.env.FLASK_API_URL || 'http://localhost:8000';
+    this.baseURL = process.env.FLASK_URL || 'http://localhost:8000';
     this.timeout = parseInt(process.env.FLASK_TIMEOUT || '60000'); // 60 seconds
     this.maxRetries = parseInt(process.env.FLASK_MAX_RETRIES || '3');
 
@@ -190,9 +205,11 @@ class FlaskAIService {
         formData.append('text', request.textInput);
       }
 
+      const endpoint = getFlaskEndpointForMode(request.mode);
+
       // POST to Flask API with form data
       const response = await this.client.post<AIAnalysisResult>(
-        '/analyze/business',
+        endpoint,
         formData,
         {
           headers: formData.getHeaders(),
@@ -204,20 +221,21 @@ class FlaskAIService {
 
       const processingTime = Date.now() - startTime;
 
+      // Log raw Flask response for debugging and verification
+      console.log("🔍 RAW FLASK RESPONSE:", response.data);
+
       logger.info(
         {
           mode: request.mode,
           processingTime,
-          confidence: response.data.confidence,
           success: response.data.success,
+          dataKeys: Object.keys(response.data),
         },
         'AI analysis completed'
       );
 
-      return {
-        ...response.data,
-        processingTime,
-      };
+      // Return Flask response exactly as received (transparent proxy)
+      return response.data;
     } catch (error) {
       const err = error as AxiosError;
       const processingTime = Date.now() - startTime;

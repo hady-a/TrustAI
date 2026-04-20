@@ -36,7 +36,9 @@ interface VoiceAnalysisResult {
 interface CredibilityResult {
   success: boolean;
   credibility_score?: number;
-  lie_probability?: number;
+  risk_level?: string;
+  confidence_level?: number;
+  behavioral_signals?: string[];
   [key: string]: any;
 }
 
@@ -44,7 +46,7 @@ export class AIAnalysisService {
   private client: AxiosInstance;
   private baseUrl: string;
 
-  constructor(baseUrl: string = process.env.FLASK_API_URL || 'http://localhost:5000') {
+  constructor(baseUrl: string = process.env.FLASK_URL || 'http://localhost:8000') {
     this.baseUrl = baseUrl;
     this.client = axios.create({
       baseURL: this.baseUrl,
