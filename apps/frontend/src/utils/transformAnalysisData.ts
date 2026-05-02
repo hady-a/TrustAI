@@ -88,7 +88,7 @@ export function transformAnalysisData(apiResponse: any): AnalysisData {
     riskLevel === 'critical' ? 'Critical' : riskLevel === 'high' ? 'High' : riskLevel === 'medium' ? 'Moderate' : 'Low'
   }`;
 
-  const result = {
+  const result: any = {
     deceptionScore,
     credibilityScore,
     confidence: confidenceScore,
@@ -98,6 +98,9 @@ export function transformAnalysisData(apiResponse: any): AnalysisData {
     riskLevel,
     behavioralSignals,
     summary,
+    face: apiResponse?.face,
+    voice: apiResponse?.voice,
+    credibility: apiResponse?.credibility,
     metrics: {
       voice_stress: stressLevel ?? 'N/A',
       voice_emotion: emotion ?? 'N/A',
