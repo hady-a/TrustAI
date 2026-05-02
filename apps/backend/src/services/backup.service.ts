@@ -3,9 +3,9 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../index';
-import { backups } from '../schema/backups';
-import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { backups } from '../db/schema/backups';
+import { eq, desc, sql } from 'drizzle-orm';
 
 const execAsync = promisify(exec);
 
@@ -83,7 +83,7 @@ export class BackupService {
           errorMessage,
         })
         .where(eq(backups.id, backupId))
-        .catching(() => {}); // Ignore update errors
+        .catch(() => {}); // Ignore update errors if DB fails
 
       throw new Error(`Backup creation failed: ${errorMessage}`);
     }
@@ -109,6 +109,10 @@ export class BackupService {
       const filePath = backup.filePath;
 
       // Check if file exists
+      if (!filePath) {
+        throw new Error('Backup file path not found');
+      }
+
       try {
         await fs.access(filePath);
       } catch {
@@ -206,9 +210,7 @@ export class BackupService {
    */
   static async getAllBackups() {
     try {
-      const allBackups = await db.query.backups.findMany({
-        orderBy: (backups, { desc }) => [desc(backups.createdAt)],
-      });
+      const allBackups = await db.select().from(backups).orderBy(desc(backups.createdAt));
 
       return {
         success: true,
@@ -227,13 +229,14 @@ export class BackupService {
   static async cleanupOldBackups() {
     try {
       const now = new Date();
+      const retentionMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+      const cutoffDate = new Date(now.getTime() - retentionMs);
       
+      // Find backups older than retention period
       const oldBackups = await db
         .select()
         .from(backups)
-        .where((col) => {
-          return new Date(col.createdAt) < new Date(now.getTime() - col.retentionDays * 24 * 60 * 60 * 1000);
-        });
+        .where((col) => sql`${col.createdAt}::timestamp < ${cutoffDate}::timestamp`);
 
       for (const backup of oldBackups) {
         await this.deleteBackup(backup.id);

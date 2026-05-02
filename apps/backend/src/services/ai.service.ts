@@ -1,82 +1,290 @@
-import { logger } from '../lib/logger';
-import { AppError } from '../lib/AppError';
+/**
+ * AI Analysis Service
+ * Service layer for communicating with the Flask AI API
+ */
 
-export interface AIResponse {
-    overall_risk_score: number;
-    confidence_level: number;
-    modality_breakdown: {
-        video: number;
-        audio: number;
-        text: number;
-    };
-    detected_indicators: string[];
-    explanation_summary: string;
-    model_details: object;
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import FormData from 'form-data';
+import * as fs from 'fs';
+import { logger } from '../lib/logger';
+
+interface AIAnalysisResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+  timestamp?: string;
+  report_type?: string;
 }
 
-export class AIService {
-  private static AI_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-  private static TIMEOUT_MS = 30000; // 30 seconds
+interface FaceAnalysisResult {
+  success: boolean;
+  age?: number;
+  gender?: string;
+  emotion?: string;
+  race?: string;
+  [key: string]: any;
+}
+
+interface VoiceAnalysisResult {
+  success: boolean;
+  transcription?: string;
+  stress_level?: number;
+  emotion?: string;
+  [key: string]: any;
+}
+
+interface CredibilityResult {
+  success: boolean;
+  credibility_score?: number;
+  risk_level?: string;
+  confidence_level?: number;
+  behavioral_signals?: string[];
+  [key: string]: any;
+}
+
+export class AIAnalysisService {
+  private client: AxiosInstance;
+  private baseUrl: string;
+
+  constructor(baseUrl: string = process.env.FLASK_URL || 'http://localhost:8000') {
+    this.baseUrl = baseUrl;
+    this.client = axios.create({
+      baseURL: this.baseUrl,
+      timeout: 120000, // 2 minutes timeout for AI processing
+    });
+  }
 
   /**
-   * Calls the external FastAPI microservice to process evidence
+   * Check if Flask API is healthy
    */
-  static async analyze(userId: string, modes: string[], fileUrl: string): Promise<AIResponse> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.TIMEOUT_MS);
-
+  async healthCheck(): Promise<boolean> {
     try {
-      logger.info({ userId, modes, fileUrl }, 'Calling AI microservice...');
-
-      // In a real scenario, you would send the actual payload required by your FastAPI service
-      const response = await fetch(`${this.AI_URL}/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          modes,
-          file_url: fileUrl,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        throw new AppError(`AI Service returned ${response.status}`, response.status, 'AI_SERVICE_ERROR');
-      }
-
-      const data = await response.json();
-
-      // Validate against the expected structure
-      this.validateAIResponse(data);
-
-      logger.info({ userId }, 'AI microservice analysis completed successfully');
-      return data as AIResponse;
-
-    } catch (error: any) {
-      clearTimeout(timeout);
-
-      if (error.name === 'AbortError') {
-        logger.error('AI microservice timed out');
-        throw new AppError('AI processing timeout', 504, 'AI_TIMEOUT');
-      }
-
-      logger.error({ err: error }, 'AI microservice failed');
-      throw new AppError(error.message || 'AI processing failed', 500, 'AI_FAILURE');
+      const response = await this.client.get('/health');
+      logger.debug({ status: response.status }, 'Flask API health check passed');
+      return response.status === 200;
+    } catch (error) {
+      logger.debug(
+        { message: (error as Error).message },
+        'Flask API health check - not available (expected if Flask is not running)'
+      );
+      return false;
     }
   }
 
   /**
-   * Validates the AI response strictly against expected schema structure
+   * Get API status and available endpoints
    */
-  private static validateAIResponse(data: any): asserts data is AIResponse {
-    if (typeof data?.overall_risk_score !== 'number') throw new Error('Missing or invalid overall_risk_score');
-    if (typeof data?.confidence_level !== 'number') throw new Error('Missing or invalid confidence_level');
-    if (!data?.modality_breakdown || typeof data.modality_breakdown !== 'object') throw new Error('Missing modality_breakdown');
-    if (!Array.isArray(data?.detected_indicators)) throw new Error('Missing detected_indicators array');
-    if (typeof data?.explanation_summary !== 'string') throw new Error('Missing explanation_summary');
+  async getStatus() {
+    try {
+      const response = await this.client.get('/api/status');
+      return response.data;
+    } catch (error) {
+      logger.error({ error }, 'Failed to get Flask API status');
+      throw error;
+    }
+  }
+
+  /**
+   * Run complete analysis with image and/or audio
+   */
+  async analyzeComplete(
+    imagePath?: string,
+    audioPath?: string,
+    reportType: string = 'general',
+    videoDuration: number = 5
+  ): Promise<AIAnalysisResponse> {
+    try {
+      const formData = new FormData();
+
+      // Add image file if provided
+      if (imagePath && fs.existsSync(imagePath)) {
+        formData.append('image', fs.createReadStream(imagePath));
+      }
+
+      // Add audio file if provided
+      if (audioPath && fs.existsSync(audioPath)) {
+        formData.append('audio', fs.createReadStream(audioPath));
+      }
+
+      // Add parameters
+      formData.append('report_type', reportType);
+      formData.append('video_duration', videoDuration.toString());
+
+      const response = await this.client.post('/api/analyze', formData, {
+        headers: formData.getHeaders(),
+      });
+
+      logger.info(
+        { analysisId: response.data.data?.id, reportType },
+        'Complete analysis succeeded'
+      );
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      logger.error(
+        { error: axiosError.message, status: axiosError.status },
+        'Complete analysis failed'
+      );
+      throw this.handleAPIError(error);
+    }
+  }
+
+  /**
+   * Analyze facial image only
+   */
+  async analyzeFace(imagePath: string): Promise<AIAnalysisResponse> {
+    try {
+      if (!fs.existsSync(imagePath)) {
+        throw new Error(`Image file not found: ${imagePath}`);
+      }
+
+      const formData = new FormData();
+      formData.append('image', fs.createReadStream(imagePath));
+
+      const response = await this.client.post('/api/analyze/face', formData, {
+        headers: formData.getHeaders(),
+      });
+
+      logger.info({ success: response.data.success }, 'Face analysis succeeded');
+      return response.data;
+    } catch (error) {
+      logger.error({ error }, 'Face analysis failed');
+      throw this.handleAPIError(error);
+    }
+  }
+
+  /**
+   * Analyze voice/audio only
+   */
+  async analyzeVoice(audioPath: string): Promise<AIAnalysisResponse> {
+    try {
+      if (!fs.existsSync(audioPath)) {
+        throw new Error(`Audio file not found: ${audioPath}`);
+      }
+
+      const formData = new FormData();
+      formData.append('audio', fs.createReadStream(audioPath));
+
+      const response = await this.client.post('/api/analyze/voice', formData, {
+        headers: formData.getHeaders(),
+      });
+
+      logger.info({ success: response.data.success }, 'Voice analysis succeeded');
+      return response.data;
+    } catch (error) {
+      logger.error({ error }, 'Voice analysis failed');
+      throw this.handleAPIError(error);
+    }
+  }
+
+  /**
+   * Analyze credibility/lie detection
+   */
+  async analyzeCredibility(
+    imagePath?: string,
+    audioPath?: string,
+    reportType: string = 'general'
+  ): Promise<AIAnalysisResponse> {
+    try {
+      const formData = new FormData();
+
+      // Add image file if provided
+      if (imagePath && fs.existsSync(imagePath)) {
+        formData.append('image', fs.createReadStream(imagePath));
+      }
+
+      // Add audio file if provided
+      if (audioPath && fs.existsSync(audioPath)) {
+        formData.append('audio', fs.createReadStream(audioPath));
+      }
+
+      formData.append('report_type', reportType);
+
+      const response = await this.client.post('/api/analyze/credibility', formData, {
+        headers: formData.getHeaders(),
+      });
+
+      logger.info({ reportType }, 'Credibility analysis succeeded');
+      return response.data;
+    } catch (error) {
+      logger.error({ error }, 'Credibility analysis failed');
+      throw this.handleAPIError(error);
+    }
+  }
+
+  /**
+   * Generate report from analysis data
+   */
+  async generateReport(
+    faceData: any,
+    voiceData: any,
+    credibilityData: any,
+    reportType: string = 'general'
+  ): Promise<AIAnalysisResponse> {
+    try {
+      const response = await this.client.post('/api/analyze/report', {
+        face_data: faceData,
+        voice_data: voiceData,
+        credibility_data: credibilityData,
+        report_type: reportType,
+      });
+
+      logger.info({ reportType }, 'Report generation succeeded');
+      return response.data;
+    } catch (error) {
+      logger.error({ error }, 'Report generation failed');
+      throw this.handleAPIError(error);
+    }
+  }
+
+  /**
+   * Validate Flask API connection
+   */
+  async validateConnection(): Promise<boolean> {
+    try {
+      const isHealthy = await this.healthCheck();
+      if (!isHealthy) {
+        logger.debug('Flask API is not responding (this is normal if Flask is not started)');
+        return false;
+      }
+
+      const status = await this.getStatus();
+      logger.debug({ status }, 'Flask API connection validated');
+      return true;
+    } catch (error) {
+      logger.debug(
+        { message: (error as Error).message },
+        'Flask API connection check - not available (expected if Flask is not running)'
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Handle API errors and convert to meaningful messages
+   */
+  private handleAPIError(error: any): Error {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const message = error.response?.data?.error || error.message;
+
+      const errorMap: { [key: number]: string } = {
+        400: 'Invalid request parameters',
+        401: 'Unauthorized access to Flask API',
+        403: 'Forbidden access to Flask API',
+        404: 'Flask API endpoint not found',
+        413: 'File size exceeds maximum allowed',
+        500: 'Flask API internal error',
+        503: 'Flask API is temporarily unavailable',
+      };
+
+      const friendlyMessage = errorMap[status || 0] || message || 'Unknown error occurred';
+      return new Error(`Flask API Error: ${friendlyMessage}`);
+    }
+
+    return error instanceof Error ? error : new Error('Unknown error during AI analysis');
   }
 }
+
+// Export singleton instance
+export const aiAnalysisService = new AIAnalysisService();

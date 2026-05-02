@@ -5,7 +5,6 @@ import SkeletonLoader from "../components/SkeletonLoader"
 import { useServiceWorker } from "../hooks/useServiceWorker"
 import { useOffline } from "../contexts/OfflineContext"
 import { useFileUploadRetry } from "../hooks/useRetry"
-import { Icon } from "../components/UI/IconRenderer"
 
 export default function AdvancedFeaturesDemo() {
   const [activeTab, setActiveTab] = useState<"pagination" | "skeleton" | "retry" | "offline" | "pwa">("pagination")
@@ -83,11 +82,11 @@ export default function AdvancedFeaturesDemo() {
                   : "bg-gray-800/50 text-gray-300 border border-gray-700 hover:border-gray-600"
               }`}
             >
-              {tab === "pagination" && <><Icon emoji="📄" /> Pagination</>}
-              {tab === "skeleton" && <><Icon emoji="🦴" /> Skeleton</>}
-              {tab === "retry" && <><Icon emoji="🔄" /> Error Recovery</>}
-              {tab === "offline" && <><Icon emoji="📵" /> Offline</>}
-              {tab === "pwa" && <><Icon emoji="🚀" /> PWA</>}
+              {tab === "pagination" && <>📄 Pagination</>}
+              {tab === "skeleton" && <>🦴 Skeleton</>}
+              {tab === "retry" && <>🔄 Error Recovery</>}
+              {tab === "offline" && <>📵 Offline</>}
+              {tab === "pwa" && <>🚀 PWA</>}
             </motion.button>
           ))}
         </div>
@@ -103,7 +102,7 @@ export default function AdvancedFeaturesDemo() {
           {activeTab === "pagination" && (
             <div className="space-y-8">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-6"><Icon emoji="📄" /> Pagination Demo</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">📄 Pagination Demo</h2>
                 <p className="text-gray-400 mb-8">
                   Efficiently handle large datasets with smart pagination controls and page jumping.
                 </p>
@@ -146,7 +145,7 @@ export default function AdvancedFeaturesDemo() {
           {activeTab === "skeleton" && (
             <div className="space-y-8">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-6"><Icon emoji="🦴" /> Skeleton Loaders Demo</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">🦴 Skeleton Loaders Demo</h2>
                 <p className="text-gray-400 mb-8">
                   Skeleton loaders provide visual feedback while content is loading, improving perceived performance.
                 </p>
@@ -190,7 +189,7 @@ export default function AdvancedFeaturesDemo() {
           {activeTab === "retry" && (
             <div className="space-y-8">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-6"><Icon emoji="🔄" /> Error Recovery Demo</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">🔄 Error Recovery Demo</h2>
                 <p className="text-gray-400 mb-8">
                   Automatic retry with exponential backoff for handling transient failures gracefully.
                 </p>
@@ -267,7 +266,7 @@ export default function AdvancedFeaturesDemo() {
           {activeTab === "offline" && (
             <div className="space-y-8">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-6"><Icon emoji="📵" /> Offline Support Demo</h2>
+                <h2 className="text-2xl font-bold text-white mb-6">📵 Offline Support Demo</h2>
                 <p className="text-gray-400 mb-8">
                   Actions are queued when offline and automatically synced when connection returns.
                 </p>
@@ -285,7 +284,7 @@ export default function AdvancedFeaturesDemo() {
                 >
                   <h3 className="text-lg font-bold mb-2 text-white">Connection Status</h3>
                   <p className={`text-3xl font-bold ${isOnline ? "text-emerald-400" : "text-orange-400"} flex items-center gap-2`}>
-                    <Icon emoji={isOnline ? "📱" : "❌"} inline={false} />
+                    <span>{isOnline ? "📱" : "❌"}</span>
                     {isOnline ? "Online" : "Offline"}
                   </p>
                   <p className={`text-sm mt-2 ${isOnline ? "text-emerald-300" : "text-orange-300"}`}>
@@ -382,7 +381,7 @@ export default function AdvancedFeaturesDemo() {
                     disabled={!isRegistered}
                     className="w-full px-4 py-2 bg-purple-600/50 border border-purple-500 rounded-lg text-purple-300 font-semibold hover:bg-purple-600/70 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Icon emoji="🗑️" inline={true} /> Clear All Cache
+                    <span>🗑️</span> Clear All Cache
                   </button>
                   <p className="text-xs text-gray-400 mt-3">
                     Removes all cached assets to free up storage space
@@ -407,7 +406,7 @@ export default function AdvancedFeaturesDemo() {
                       whileHover={{ scale: 1.05 }}
                       className="p-4 bg-gray-700/50 border border-gray-600 rounded-lg"
                     >
-                      <Icon emoji={feature.icon} size="lg" className="text-2xl mb-2 block" inline={false} />
+                      <span className="text-2xl mb-2 block">{feature.icon}</span>
                       <p className="font-bold text-white">{feature.title}</p>
                       <p className="text-xs text-gray-400">{feature.desc}</p>
                     </motion.div>
@@ -417,7 +416,7 @@ export default function AdvancedFeaturesDemo() {
 
               {/* Installation Instructions */}
               <div className="bg-blue-900/30 border border-blue-700/50 rounded-xl p-6">
-                <h3 className="text-lg font-bold text-blue-300 mb-4"><Icon emoji="📲" /> How to Install</h3>
+                <h3 className="text-lg font-bold text-blue-300 mb-4">📲 How to Install</h3>
                 <div className="space-y-3 text-sm text-blue-200">
                   <p>
                     <strong>iOS:</strong> Open in Safari → Share → Add to Home Screen

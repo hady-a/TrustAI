@@ -1,3 +1,15 @@
+/**
+ * Centralized Application Error Class
+ * 
+ * Extended by all application-specific errors.
+ * Provides structured error handling with HTTP status codes.
+ * 
+ * Uses:
+ * - Controllers: throw new AppError('message', 400)
+ * - Controllers: throw new AppError('message', 400, 'ERROR_CODE')
+ * - Services: throw new AppError('message', 500)
+ * - Middleware: throw new AppError('message', 401)
+ */
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly isOperational: boolean;
@@ -14,10 +26,10 @@ export class AppError extends Error {
     this.errorCode = errorCode;
     this.isOperational = isOperational;
 
-    // Ensure the name of this error is the same as the class name
+    // Ensure error name matches class name for better debugging
     this.name = this.constructor.name;
 
-    // This clips the constructor invocation from the stack trace
+    // Capture stack trace for better error tracking and debugging
     Error.captureStackTrace(this, this.constructor);
   }
 }

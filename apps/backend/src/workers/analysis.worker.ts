@@ -1,188 +1,278 @@
-import { Worker, Job } from 'bullmq';
-import IORedis from 'ioredis';
-import { db } from '../db';
-import { analyses } from '../db/schema/analyses';
-import { analysisStatusHistory } from '../db/schema/analysisStatusHistory';
+import { Worker } from 'bullmq';
+import { redisClient, AnalysisJobData } from '../config/queue';
+import { logger, logJob, logError } from '../config/logger';
+import { flaskAIService } from '../services/flask.ai.service';
+import { fileUploadService } from '../services/file.upload.service';
+import { db } from '../db/index';
+import { analysisRecords } from '../schema/analysis';
 import { eq } from 'drizzle-orm';
-import { logger } from '../lib/logger';
-import { ANALYSIS_QUEUE_NAME, AnalysisJobPayload } from '../queues/analysis.queue';
-import { AIService } from '../services/ai.service';
-import type { analysisStatusEnum } from '../db/schema/enums';
-
-const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-    maxRetriesPerRequest: null,
-});
-
-// Type for valid analysis statuses
-type AnalysisStatus = 'UPLOADED' | 'QUEUED' | 'PROCESSING' | 'AI_ANALYZED' | 'COMPLETED' | 'FAILED';
 
 /**
- * Utility to update analysis status with transaction
- * Records status change in history table
+ * Analysis Processing Worker
+ *
+ * Processes jobs from the analysis queue asynchronously
+ * Flow:
+ * 1. Receive job from queue
+ * 2. Call Flask AI API with files
+ * 3. Store results in database
+ * 4. Update analysis status
+ * 5. Cleanup temporary files
  */
-const updateAnalysisStatus = async (
-    analysisId: string,
-    oldStatus: AnalysisStatus,
-    newStatus: AnalysisStatus,
-    results: any = null
-) => {
-    await db.transaction(async (tx) => {
-        // Update analysis record
-        await tx
-            .update(analyses)
-            .set({ status: newStatus, results })
-            .where(eq(analyses.id, analysisId));
 
-        // Insert into history for timeline tracking
-        await tx.insert(analysisStatusHistory).values({
-            analysisId,
-            oldStatus,
-            newStatus,
-        });
+class AnalysisWorker {
+  private worker: Worker<AnalysisJobData> | null = null;
 
-        logger.info(
-            { analysisId, oldStatus, newStatus },
-            `Analysis status updated: ${oldStatus} -> ${newStatus}`
-        );
-    });
-};
-
-/**
- * Analysis worker processes jobs from the queue
- * Implements full status pipeline with AI processing
- */
-export const analysisWorker = new Worker<AnalysisJobPayload>(
-    ANALYSIS_QUEUE_NAME,
-    async (job: Job<AnalysisJobPayload>) => {
-        const { analysisId, userId, fileUrl, filePaths, modes } = job.data;
-        const startTime = Date.now();
-
-        logger.info(
-            { jobId: job.id, analysisId, userId, modes },
-            '🚀 Analysis worker started'
-        );
-
-        try {
-            // Stage 1: Validate and get current status
-            const [currentAnalysis] = await db
-                .select()
-                .from(analyses)
-                .where(eq(analyses.id, analysisId));
-
-            if (!currentAnalysis) {
-                throw new Error(`Analysis ${analysisId} not found`);
-            }
-
-            const currentStatus = currentAnalysis.status as AnalysisStatus;
-            logger.info({ analysisId, currentStatus }, 'Current analysis status');
-
-            // Stage 2: Mark as PROCESSING
-            await updateAnalysisStatus(analysisId, currentStatus, 'PROCESSING');
-            logger.info({ analysisId }, '⏳ Analysis processing started');
-
-            // Stage 3: Call AI microservice
-            // Use uploaded files or fileUrl
-            const inputSource = filePaths ? filePaths : fileUrl;
-            if (!inputSource) {
-                throw new Error('No file input provided for analysis');
-            }
-
-            logger.info(
-                { analysisId, inputType: filePaths ? 'uploaded_files' : 'url', inputSource },
-                'Calling AI service'
-            );
-
-            const aiResult = await AIService.analyze(userId, modes, fileUrl || filePaths?.[0]);
-
-            // Stage 4: Mark as AI_ANALYZED
-            await updateAnalysisStatus(analysisId, 'PROCESSING', 'AI_ANALYZED', aiResult);
-            logger.info({ analysisId }, '🤖 AI analysis complete');
-
-            // Stage 5: Mark as COMPLETED with results
-            await updateAnalysisStatus(analysisId, 'AI_ANALYZED', 'COMPLETED', aiResult);
-
-            const processingTime = Date.now() - startTime;
-            logger.info(
-                { jobId: job.id, analysisId, processingTime },
-                `✅ Analysis completed in ${processingTime}ms`
-            );
-
-            return {
-                success: true,
-                analysisId,
-                processingTime,
-                result: aiResult,
-            };
-
-        } catch (error: any) {
-            const errorTime = Date.now() - startTime;
-            logger.error(
-                { err: error, jobId: job.id, analysisId, errorTime, attempt: job.attemptsMade },
-                '❌ Analysis job failed'
-            );
-
-            // Get current status for error handling
-            const [failedAnalysis] = await db
-                .select()
-                .from(analyses)
-                .where(eq(analyses.id, analysisId));
-
-            const currentStatus = (failedAnalysis?.status || 'PROCESSING') as AnalysisStatus;
-
-            // Only mark as FAILED if we've exhausted retry attempts
-            if (job.attemptsMade >= (job.opts.attempts || 1) - 1) {
-                logger.warn({ analysisId, attempts: job.attemptsMade }, 'Marking analysis as FAILED after max retries');
-                await updateAnalysisStatus(
-                    analysisId,
-                    currentStatus,
-                    'FAILED',
-                    {
-                        error: error.message,
-                        code: error.code || 'PROCESSING_ERROR',
-                        timestamp: new Date().toISOString(),
-                    }
-                );
-            }
-
-            throw error;
-        }
-    },
-    {
-        connection: redisConnection,
-        concurrency: process.env.WORKER_CONCURRENCY
-            ? parseInt(process.env.WORKER_CONCURRENCY, 10)
-            : 5,
-        // Retry configuration
-        attempts: 3,
-        backoff: {
-            type: 'exponential',
-            delay: 2000,
+  /**
+   * Start the worker process
+   * Listens for jobs and processes them
+   */
+  async start() {
+    try {
+      // Create worker instance
+      this.worker = new Worker<AnalysisJobData>(
+        'analysis-processing',
+        async (job) => {
+          return this.processJob(job);
         },
+        {
+          connection: redisClient,
+          concurrency: parseInt(process.env.WORKER_CONCURRENCY || '2'),
+        }
+      );
+
+      // Handle worker events
+      this.worker.on('completed', (job) => {
+        logJob(job.id!, 'completed', {
+          analysisId: job.data.analysisId,
+          processingTime: job.finishedOn! - job.processedOn!,
+        });
+      });
+
+      this.worker.on('failed', (job, err) => {
+        logJob(job!.id!, 'failed', {
+          analysisId: job!.data.analysisId,
+          error: err.message,
+          attempt: job!.attemptsMade,
+        });
+      });
+
+      this.worker.on('error', (err) => {
+        logError(err, { context: 'AnalysisWorker.error' });
+      });
+
+      logger.info(
+        { concurrency: parseInt(process.env.WORKER_CONCURRENCY || '2') },
+        'Analysis worker started'
+      );
+    } catch (error) {
+      logError(error as Error, { context: 'AnalysisWorker.start' });
+      throw error;
     }
-);
+  }
+
+  /**
+   * Process a single analysis job
+   * This is where the main work happens
+   */
+  private async processJob(job: any) {
+    const { analysisId, userId, mode, audioPath, imagePath, textInput } = job.data as AnalysisJobData;
+
+    logger.info(
+      {
+        jobId: job.id,
+        analysisId,
+        mode,
+      },
+      'Starting job processing'
+    );
+
+    try {
+      // Update status: processing
+      await this.updateAnalysisStatus(analysisId, 'processing');
+      await job.updateProgress(10);
+
+      // Step 1: Verify Flask API is healthy
+      logger.debug('Checking Flask API health...');
+      const flaskHealthy = await flaskAIService.healthCheck();
+      if (!flaskHealthy) {
+        throw new Error('Flask AI API is not responding');
+      }
+      await job.updateProgress(20);
+
+      // Step 2: Call Flask AI for analysis
+      logger.debug({ audioPath, imagePath, textInput }, 'Calling Flask AI...');
+      const analysisResult = await flaskAIService.analyze({
+        audioPath,
+        imagePath,
+        textInput,
+        mode,
+      });
+      await job.updateProgress(70);
+
+      if (!analysisResult.success) {
+        throw new Error(analysisResult.error || 'Analysis failed');
+      }
+
+      // Step 3: Store results in database
+      logger.debug('Storing results in database...');
+      await db
+        .update(analysisRecords)
+        .set({
+          status: 'completed',
+          confidence: analysisResult.confidence?.toString(),
+          summary: analysisResult.prediction,
+          faceAnalysis: analysisResult.faceAnalysis,
+          voiceAnalysis: analysisResult.voiceAnalysis,
+          credibilityAnalysis: analysisResult.credibilityAnalysis,
+          recommendations: analysisResult.credibilityAnalysis?.recommendation,
+          processingTime: analysisResult.processingTime,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(analysisRecords.id, analysisId));
+
+      await job.updateProgress(80);
+
+      // Step 4: Cleanup temporary files
+      logger.debug('Cleaning up temporary files...');
+      if (audioPath) {
+        await fileUploadService.deleteFile(audioPath);
+      }
+      if (imagePath) {
+        await fileUploadService.deleteFile(imagePath);
+      }
+      await job.updateProgress(90);
+
+      // Step 5: Cleanup Flask-side storage
+      await flaskAIService.cleanupAnalysis(analysisId);
+      await job.updateProgress(100);
+
+      // Update final status
+      await this.updateAnalysisStatus(analysisId, 'completed');
+
+      logger.info(
+        {
+          jobId: job.id,
+          analysisId,
+          processingTime: analysisResult.processingTime,
+          confidence: analysisResult.confidence,
+        },
+        'Job completed successfully'
+      );
+
+      // Return result for job completion
+      return {
+        success: true,
+        analysisId,
+        data: analysisResult,
+      };
+    } catch (error) {
+      const err = error as Error;
+
+      logger.error(
+        {
+          jobId: job.id,
+          analysisId,
+          error: err.message,
+          stack: err.stack,
+          attempt: job.attemptsMade,
+          maxAttempts: job.opts.attempts,
+        },
+        'Job processing failed'
+      );
+
+      // Determine if this is the final attempt
+      if (job.attemptsMade >= job.opts.attempts) {
+        // Final failure - update status to failed
+        await this.updateAnalysisStatus(analysisId, 'failed', err.message);
+
+        // Cleanup files on final failure
+        const jobData = job.data as AnalysisJobData;
+        if (jobData.audioPath) {
+          await fileUploadService.deleteFile(jobData.audioPath);
+        }
+        if (jobData.imagePath) {
+          await fileUploadService.deleteFile(jobData.imagePath);
+        }
+      }
+
+      // Throw error to let BullMQ handle retries
+      throw error;
+    }
+  }
+
+  /**
+   * Update analysis status in database
+   */
+  private async updateAnalysisStatus(
+    analysisId: string,
+    status: string,
+    errorMessage?: string
+  ): Promise<void> {
+    try {
+      await db
+        .update(analysisRecords)
+        .set({
+          status: status,
+          errorMessage: errorMessage,
+          updatedAt: new Date(),
+        })
+        .where(eq(analysisRecords.id, analysisId));
+
+      logger.debug(
+        { analysisId, status, errorMessage },
+        'Updated analysis status'
+      );
+    } catch (error) {
+      logger.error(
+        { analysisId, error: (error as Error).message },
+        'Failed to update analysis status'
+      );
+    }
+  }
+
+  /**
+   * Gracefully shutdown worker
+   */
+  async shutdown() {
+    if (this.worker) {
+      logger.info('Shutting down worker...');
+      await this.worker.close();
+      logger.info('Worker shut down complete');
+    }
+  }
+}
+
+// Create and export singleton
+export const analysisWorker = new AnalysisWorker();
 
 /**
- * Worker event handlers for logging and monitoring
+ * Start worker on import (for worker process)
+ * Environment variable WORKER_MODE=true to enable
  */
-analysisWorker.on('completed', (job: Job) => {
-    logger.info(
-        { jobId: job.id, analysisId: job.data.analysisId },
-        '✅ Job completed successfully'
-    );
-});
+if (process.env.WORKER_MODE === 'true') {
+  analysisWorker
+    .start()
+    .then(() => {
+      logger.info('Worker process initialized and ready');
+    })
+    .catch((error) => {
+      logError(error, { context: 'AnalysisWorker initialization' });
+      process.exit(1);
+    });
 
-analysisWorker.on('failed', (job: Job | undefined, err: Error) => {
-    logger.error(
-        { jobId: job?.id, analysisId: job?.data.analysisId, err },
-        '❌ Job failed'
-    );
-});
+  // Graceful shutdown on signals
+  process.on('SIGTERM', async () => {
+    logger.info('SIGTERM received, shutting down gracefully...');
+    await analysisWorker.shutdown();
+    process.exit(0);
+  });
 
-analysisWorker.on('error', (err: Error) => {
-    logger.error({ err }, '⚠️  Worker error');
-});
+  process.on('SIGINT', async () => {
+    logger.info('SIGINT received, shutting down gracefully...');
+    await analysisWorker.shutdown();
+    process.exit(0);
+  });
+}
 
-analysisWorker.on('stalled', (jobId: string) => {
-    logger.warn({ jobId }, '⏸️  Job stalled');
-});
-
+export default analysisWorker;

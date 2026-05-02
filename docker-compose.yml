@@ -93,25 +93,6 @@ services:
       - trustai-network
     restart: unless-stopped
 
-  # AI Service (Python + FastAPI)
-  ai-service:
-    build:
-      context: .
-      dockerfile: apps/ai-service/Dockerfile
-    container_name: trustai-ai-service
-    ports:
-      - "8000:8000"
-    environment:
-      PYTHONUNBUFFERED: 1
-      LOG_LEVEL: info
-    volumes:
-      # Hot reload for development
-      - ./apps/ai-service:/app
-      - /app/__pycache__
-    networks:
-      - trustai-network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
     driver: local

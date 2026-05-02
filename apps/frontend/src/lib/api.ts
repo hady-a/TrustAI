@@ -176,6 +176,12 @@ export const analysisAPI = {
 
   getById: (id: string) =>
     api.get(`/analyses/${id}`),
+
+  get: (endpoint: string) =>
+    api.get(endpoint),
+
+  post: (endpoint: string, data: any, config?: any) =>
+    api.post(endpoint, data, config),
 }
 
 export default api

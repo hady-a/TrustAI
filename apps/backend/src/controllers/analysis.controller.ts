@@ -5,7 +5,6 @@ import {
   analysisStatusHistorySchema,
   getAnalysisFilesSchema,
 } from '../validators/analysis.validator';
-import { addAnalysisJob } from '../queues/analysis.queue';
 import { AuditService } from '../services/audit.service';
 import { FileService } from '../services/file.service';
 import { AnalysisLogService } from '../services/analysisLogging.service';
@@ -16,6 +15,7 @@ import { files } from '../db/schema/files';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../lib/AppError';
 import { logger } from '../lib/logger';
+import { flaskAIService } from '../services/flask.ai.service';
 
 export class AnalysisController {
   /**
@@ -70,26 +70,6 @@ export class AnalysisController {
       .update(analyses)
       .set({ status: 'QUEUED' })
       .where(eq(analyses.id, newAnalysis.id));
-
-    // Push job to Redis queue
-    try {
-      await addAnalysisJob({
-        analysisId: newAnalysis.id,
-        userId,
-        fileUrl,
-        modes,
-      });
-      
-      await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis queued for processing', {
-        fileUrl,
-        modes,
-      });
-    } catch (error: any) {
-      await AnalysisLogService.error(newAnalysis.id, userId, 'Failed to queue analysis', {
-        error: error.message,
-      });
-      throw error;
-    }
 
     // Log the action
     await AuditService.log(userId, 'CREATE_ANALYSIS', {
@@ -155,14 +135,22 @@ export class AnalysisController {
 
       // Process uploaded files
       const uploadedFiles = [];
+      let audioPath: string | undefined;
+      let imagePath: string | undefined;
       for (const file of req.files) {
         try {
+          // Determine file type from MIME type
+          let fileType: 'VIDEO' | 'AUDIO' | 'TEXT';
+          if (file.mimetype.startsWith('audio/')) {
+            fileType = 'AUDIO';
+          } else if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('image/')) {
+            fileType = 'VIDEO';
+          } else {
+            fileType = 'TEXT';
+          }
+
           // Validate file
-          const validation = FileService.validateFile(
-            file.mimetype,
-            file.size,
-            file.fieldname as 'VIDEO' | 'AUDIO' | 'TEXT'
-          );
+          const validation = FileService.validateFile(file.mimetype, file.size, fileType);
 
           if (!validation.valid) {
             await AnalysisLogService.warn(newAnalysis.id, userId, 'Invalid file validation', {
@@ -179,6 +167,10 @@ export class AnalysisController {
             file.originalname
           );
 
+          // Track audio/image paths for Flask
+          if (fileType === 'AUDIO') audioPath = filePath;
+          else if (fileType === 'VIDEO') imagePath = filePath;
+
           // Create file record in database
           const fileRecord = await FileService.createFileRecord({
             analysisId: newAnalysis.id,
@@ -186,7 +178,7 @@ export class AnalysisController {
             mimeType: file.mimetype,
             filePath,
             size: file.size,
-            fileType: file.fieldname as 'VIDEO' | 'AUDIO' | 'TEXT',
+            fileType,
             metadata: {
               uploadedAt: new Date().toISOString(),
             },
@@ -210,48 +202,45 @@ export class AnalysisController {
         }
       }
 
-      // Update analysis to QUEUED
-      await db
+      if (!audioPath) {
+        throw new AppError('An audio file is required for analysis', 400, 'MISSING_AUDIO_FILE');
+      }
+
+      // Call Flask AI service synchronously
+      logger.info({ analysisId: newAnalysis.id, userId }, 'Sending files to Flask AI service');
+
+      const flaskResult = await flaskAIService.analyze({
+        audioPath,
+        imagePath,
+        mode: (modes?.[0] as 'BUSINESS' | 'CRIMINAL' | 'INTERVIEW' | 'INVESTIGATION') || 'BUSINESS',
+      });
+
+      const finalStatus = flaskResult.success ? 'COMPLETED' : 'FAILED';
+
+      // Persist result and update status
+      const [completedAnalysis] = await db
         .update(analyses)
-        .set({ status: 'QUEUED' })
-        .where(eq(analyses.id, newAnalysis.id));
+        .set({
+          status: finalStatus,
+          results: flaskResult as any,
+          confidenceLevel: String(flaskResult.confidence ?? 0),
+          overallRiskScore: Math.round((flaskResult.trustScore ?? 0) * 100),
+        })
+        .where(eq(analyses.id, newAnalysis.id))
+        .returning();
 
       await db.insert(analysisStatusHistory).values({
         analysisId: newAnalysis.id,
         oldStatus: 'UPLOADED',
-        newStatus: 'QUEUED',
+        newStatus: finalStatus,
       });
 
-      // Log status transition
-      await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis status changed', {
-        from: 'UPLOADED',
-        to: 'QUEUED',
+      await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis completed', {
+        status: finalStatus,
+        confidence: flaskResult.confidence,
         fileCount: uploadedFiles.length,
       });
 
-      // Push job to Redis queue with uploaded file paths
-      try {
-        await addAnalysisJob({
-          analysisId: newAnalysis.id,
-          userId,
-          modes,
-          fileIds: uploadedFiles.map((f) => f.id),
-          filePaths: uploadedFiles.map((f) => f.filePath),
-        });
-
-        await AnalysisLogService.info(newAnalysis.id, userId, 'Analysis queued for processing', {
-          fileCount: uploadedFiles.length,
-          modes,
-        });
-      } catch (error: any) {
-        await AnalysisLogService.error(newAnalysis.id, userId, 'Failed to queue analysis', {
-          fileCount: uploadedFiles.length,
-          error: error.message,
-        });
-        throw error;
-      }
-
-      // Log the action
       await AuditService.log(userId, 'CREATE_ANALYSIS', {
         analysisId: newAnalysis.id,
         modes,
@@ -260,20 +249,84 @@ export class AnalysisController {
       });
 
       logger.info(
-        { analysisId: newAnalysis.id, userId, fileCount: uploadedFiles.length },
-        'Analysis created with file uploads'
+        { analysisId: newAnalysis.id, userId, status: finalStatus },
+        'Analysis completed synchronously'
       );
 
-      return res.status(201).json({
+      return res.status(200).json({
         success: true,
-        message: 'Analysis created with files queued for processing',
+        message: 'Analysis completed successfully',
         data: {
-          analysis: newAnalysis,
+          analysis: completedAnalysis,
           files: uploadedFiles,
+          result: flaskResult,
         },
       });
     } catch (error: any) {
       logger.error({ err: error }, 'Analysis with upload failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Get full analysis result by ID
+   */
+  static async getAnalysis(req: Request, res: Response) {
+    try {
+      const { analysisId } = req.params;
+      const userId = req.user?.id;
+
+      // Verify analysis exists
+      const [analysis] = await db
+        .select()
+        .from(analyses)
+        .where(eq(analyses.id, analysisId));
+
+      if (!analysis) {
+        throw new AppError('Analysis not found', 404, 'ANALYSIS_NOT_FOUND');
+      }
+
+      // Verify user has access to this analysis
+      if (analysis.userId !== userId) {
+        throw new AppError('Access denied', 403, 'FORBIDDEN');
+      }
+
+      // Get associated files
+      const analysisFiles = await db
+        .select()
+        .from(files)
+        .where(eq(files.analysisId, analysisId));
+
+      // Extract results data with proper structure
+      const resultData = analysis.results as any || {};
+      
+      // Build response with all relevant fields
+      const responseData = {
+        id: analysis.id,
+        userId: analysis.userId,
+        status: analysis.status,
+        modes: analysis.modes,
+        overallRiskScore: analysis.overallRiskScore ? parseFloat(String(analysis.overallRiskScore)) : resultData.overall_risk_score,
+        confidenceLevel: analysis.confidenceLevel ? parseFloat(String(analysis.confidenceLevel)) : resultData.confidence_level,
+        results: resultData,
+        files: analysisFiles,
+        createdAt: analysis.createdAt,
+        updatedAt: analysis.updatedAt,
+        // Flatten important fields for easier frontend access
+        explanation: resultData.explanation_summary,
+        indicators: resultData.detected_indicators,
+        modalityBreakdown: resultData.modality_breakdown,
+        modelDetails: resultData.model_details,
+      };
+
+      logger.info({ analysisId, status: analysis.status }, '✅ Analysis retrieved successfully');
+
+      return res.status(200).json({
+        success: true,
+        data: responseData,
+      });
+    } catch (error: any) {
+      logger.error({ err: error }, 'Failed to fetch analysis');
       throw error;
     }
   }

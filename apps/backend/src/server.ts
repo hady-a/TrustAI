@@ -18,16 +18,20 @@ import cors from "cors";
 import pinoHttp from 'pino-http';
 import { logger } from './lib/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { requestIdMiddleware } from './middleware/requestId.middleware';
 import { setupSwagger } from './lib/swagger';
 import { generalLimiter } from './middleware/rateLimiter.middleware';
 import authRoutes from './routes/auth.routes';
 import analysisRoutes from './routes/analysis.routes';
+import businessAnalysisRoutes from './routes/business-analysis.routes';
+import analyzeRoutes from './routes/analyze.routes';
 import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
 import systemSettingsRoutes from './routes/systemSettings.routes';
 import { pool, checkDatabaseConnection, db } from './db';
 import { users } from './db/schema/users';
 import { eq } from 'drizzle-orm';
+import { initializeFlaskConnection, checkFlaskAPI } from './middleware/flaskAPIHealth.middleware';
 
 const app: Express = express();
 const PORT: string | number = process.env.PORT || 9999;
@@ -66,6 +70,9 @@ const corsOptions = {
 // MIDDLEWARE SETUP
 // ============================================================================
 
+// Request ID middleware MUST be first to track all requests
+app.use(requestIdMiddleware);
+
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -73,6 +80,9 @@ app.use(pinoHttp({ logger }));
 
 // Apply general rate limiting to all API routes
 app.use('/api/', generalLimiter);
+
+// Add Flask API health check to request
+app.use(checkFlaskAPI);
 
 // ============================================================================
 // HEALTH & DIAGNOSTIC ENDPOINTS
@@ -175,8 +185,13 @@ app.post("/api/test/check-user", async (req: Request, res: Response) => {
 // API ROUTES
 // ============================================================================
 
+// Analyze routes (now under /api to match frontend baseURL)
+app.use('/api', analyzeRoutes);
+
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/analyses', analysisRoutes);
+app.use('/api/analysis/business', businessAnalysisRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', systemSettingsRoutes);
@@ -213,6 +228,11 @@ async function startServer() {
       console.error('   4. Migrations are applied: npm run db:push\n');
       process.exit(1);
     }
+
+    // Initialize Flask AI API connection
+    console.log('🤖 Initializing Flask AI API connection...');
+    await initializeFlaskConnection();
+    // Note: Flask API being unavailable is not a fatal error - we continue with graceful degradation
 
     // Start HTTP server
     const server = app.listen(PORT, () => {

@@ -25,14 +25,14 @@ export default function ProgressBar({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-center justify-between mb-3"
+            className="flex items-center justify-between mb-2 sm:mb-3"
           >
-            <p className="text-white font-semibold">Analysis Progress</p>
+            <p className="text-white font-semibold text-sm sm:text-base">Analysis Progress</p>
             <motion.p
               key={progress}
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              className={`text-sm font-bold ${
+              className={`text-xs sm:text-sm font-bold ${
                 isComplete
                   ? "text-green-400"
                   : "text-indigo-400"
@@ -44,7 +44,7 @@ export default function ProgressBar({
         )}
 
         {/* Main Progress Bar */}
-        <div className="relative h-3 bg-[#111827]/50 rounded-full overflow-hidden border border-indigo-500/20 backdrop-blur-sm">
+        <div className="relative h-2 sm:h-3 bg-[#111827]/50 rounded-full overflow-hidden border border-indigo-500/20 backdrop-blur-sm">
           {/* Animated gradient background */}
           <motion.div
             animate={{ x: isComplete ? [0, 10, 0] : 0 }}

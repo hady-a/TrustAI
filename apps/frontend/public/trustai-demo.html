@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustAI - Analysis API Client</title>
+    <link rel="stylesheet" href="trustai-demo.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🔍 TrustAI Analysis API</h1>
+            <p>Intelligent Face, Voice & Text Analysis System</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-grid">
+            <!-- Business Mode Card -->
+            <div class="card">
+                <h2>💼 Business Mode</h2>
+                <p style="color: #666; margin-bottom: 20px;">Analyze facial expressions and voice during business interactions.</p>
+                
+                <div class="form-group">
+                    <label for="audioInput">📁 Audio File</label>
+                    <input type="file" id="audioInput" accept=".wav,.mp3,.m4a,.ogg,.flac">
+                    <div class="file-info">Supported: WAV, MP3, M4A, OGG, FLAC (max 50MB)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="imageInput">📷 Image File</label>
+                    <input type="file" id="imageInput" accept=".jpg,.jpeg,.png,.bmp">
+                    <div class="file-info">Supported: JPG, PNG, BMP (max 50MB)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="textInput">📝 Meeting Transcript (Optional)</label>
+                    <textarea id="textInput" placeholder="Paste meeting transcript here..."></textarea>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" onclick="analyzeBusinessMode()">
+                        Analyze Business
+                    </button>
+                    <button class="btn-secondary" onclick="clearBusinessMode()">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- HR Mode Card -->
+            <div class="card">
+                <h2>👥 HR Interview Mode</h2>
+                <p style="color: #666; margin-bottom: 20px;">Detect stress, emotions, and deception indicators during interviews.</p>
+                
+                <div class="form-group">
+                    <label for="hrAudioInput">📁 Audio File</label>
+                    <input type="file" id="hrAudioInput" accept=".wav,.mp3,.m4a,.ogg,.flac">
+                    <div class="file-info">Supported: WAV, MP3, M4A, OGG, FLAC (max 50MB)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="hrImageInput">📷 Image File</label>
+                    <input type="file" id="hrImageInput" accept=".jpg,.jpeg,.png,.bmp">
+                    <div class="file-info">Supported: JPG, PNG, BMP (max 50MB)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="hrTextInput">📝 Interview Transcript (Optional)</label>
+                    <textarea id="hrTextInput" placeholder="Paste interview transcript here..."></textarea>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" onclick="analyzeHRMode()">
+                        Analyze Interview
+                    </button>
+                    <button class="btn-secondary" onclick="clearHRMode()">
+                        Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Investigation Mode Card (Full Width) -->
+        <div class="card" style="margin-bottom: 30px;">
+            <h2>🚔 Investigation Mode</h2>
+            <p style="color: #666; margin-bottom: 20px;">Deep analysis for criminal investigation - advanced deception detection and credibility assessment.</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="invAudioInput">📁 Audio File</label>
+                    <input type="file" id="invAudioInput" accept=".wav,.mp3,.m4a,.ogg,.flac">
+                    <div class="file-info">Supported: WAV, MP3, M4A, OGG, FLAC (max 50MB)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="invImageInput">📷 Image File</label>
+                    <input type="file" id="invImageInput" accept=".jpg,.jpeg,.png,.bmp">
+                    <div class="file-info">Supported: JPG, PNG, BMP (max 50MB)</div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="invTextInput">📝 Statement / Transcript (Optional)</label>
+                <textarea id="invTextInput" placeholder="Paste the statement or transcript here..."></textarea>
+            </div>
+
+            <div class="button-group" style="margin-top: 25px;">
+                <button class="btn-primary" onclick="analyzeInvestigationMode()">
+                    Analyze Investigation
+                </button>
+                <button class="btn-secondary" onclick="clearInvestigationMode()">
+                    Clear
+                </button>
+                <button class="btn-success" onclick="checkAPIHealth()">
+                    Check API Status
+                </button>
+                <button class="btn-danger" onclick="getAPIInfo()">
+                    API Info
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section">
+            <h2>📊 Analysis Results</h2>
+            <div id="results" style="min-height: 100px;"></div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="loader" id="loader">
+        <div class="spinner"></div>
+        <p id="loadingMessage">Processing your analysis...</p>
+        <p style="color: #999; font-size: 0.9em;">This may take a few moments</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="trustai-client.js"></script>
+    <script>
+        const client = new TrustAIClient('http://localhost:5000');
+
+        // ==================== BUSINESS MODE ====================
+        async function analyzeBusinessMode() {
+            const audioFile = document.getElementById('audioInput').files[0];
+            const imageFile = document.getElementById('imageInput').files[0];
+            const text = document.getElementById('textInput').value;
+
+            if (!audioFile || !imageFile) {
+                showResults({
+                    success: false,
+                    error: 'Please select both audio and image files'
+                }, 'error');
+                return;
+            }
+
+            showLoader('Analyzing business mode...');
+
+            try {
+                const result = await client.analyzeBusinessMode(audioFile, imageFile, text);
+                showLoader(null);
+                showResults(result, 'success');
+            } catch (error) {
+                showLoader(null);
+                showResults({ success: false, error: error.message }, 'error');
+            }
+        }
+
+        function clearBusinessMode() {
+            document.getElementById('audioInput').value = '';
+            document.getElementById('imageInput').value = '';
+            document.getElementById('textInput').value = '';
+        }
+
+        // ==================== HR MODE ====================
+        async function analyzeHRMode() {
+            const audioFile = document.getElementById('hrAudioInput').files[0];
+            const imageFile = document.getElementById('hrImageInput').files[0];
+            const text = document.getElementById('hrTextInput').value;
+
+            if (!audioFile || !imageFile) {
+                showResults({
+                    success: false,
+                    error: 'Please select both audio and image files'
+                }, 'error');
+                return;
+            }
+
+            showLoader('Analyzing HR interview...');
+
+            try {
+                const result = await client.analyzeHRMode(audioFile, imageFile, text);
+                showLoader(null);
+                showResults(result, 'success');
+            } catch (error) {
+                showLoader(null);
+                showResults({ success: false, error: error.message }, 'error');
+            }
+        }
+
+        function clearHRMode() {
+            document.getElementById('hrAudioInput').value = '';
+            document.getElementById('hrImageInput').value = '';
+            document.getElementById('hrTextInput').value = '';
+        }
+
+        // ==================== INVESTIGATION MODE ====================
+        async function analyzeInvestigationMode() {
+            const audioFile = document.getElementById('invAudioInput').files[0];
+            const imageFile = document.getElementById('invImageInput').files[0];
+            const text = document.getElementById('invTextInput').value;
+
+            if (!audioFile || !imageFile) {
+                showResults({
+                    success: false,
+                    error: 'Please select both audio and image files'
+                }, 'error');
+                return;
+            }
+
+            showLoader('Analyzing investigation...');
+
+            try {
+                const result = await client.analyzeInvestigationMode(audioFile, imageFile, text);
+                showLoader(null);
+                showResults(result, 'investigation');
+            } catch (error) {
+                showLoader(null);
+                showResults({ success: false, error: error.message }, 'error');
+            }
+        }
+
+        function clearInvestigationMode() {
+            document.getElementById('invAudioInput').value = '';
+            document.getElementById('invImageInput').value = '';
+            document.getElementById('invTextInput').value = '';
+        }
+
+        // ==================== API UTILITIES ====================
+        async function checkAPIHealth() {
+            showLoader('Checking API health...');
+            try {
+                const result = await client.healthCheck();
+                showLoader(null);
+                showResults(result, 'info');
+            } catch (error) {
+                showLoader(null);
+                showResults({ success: false, error: error.message }, 'error');
+            }
+        }
+
+        async function getAPIInfo() {
+            showLoader('Fetching API information...');
+            try {
+                const result = await client.getAPIInfo();
+                showLoader(null);
+                showResults(result, 'info');
+            } catch (error) {
+                showLoader(null);
+                showResults({ success: false, error: error.message }, 'error');
+            }
+        }
+
+        // ==================== UI HELPERS ====================
+        function showLoader(message) {
+            const loader = document.getElementById('loader');
+            if (message) {
+                document.getElementById('loadingMessage').textContent = message;
+                loader.classList.add('active');
+            } else {
+                loader.classList.remove('active');
+            }
+        }
+
+        function showResults(result, type = 'success') {
+            const resultsDiv = document.getElementById('results');
+
+            if (!result.success) {
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-error">
+                        <h3>✗ Error</h3>
+                        <p>${result.error || 'Unknown error occurred'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+
+            if (type === 'error') {
+                html = `
+                    <div class="alert alert-error">
+                        <h3>✗ Error</h3>
+                        <p>${result.error}</p>
+                    </div>
+                `;
+            } else if (type === 'info') {
+                html = `
+                    <div class="alert alert-info">
+                        <h3>ℹ️ Information</h3>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
+            } else if (type === 'investigation') {
+                const data = result.data;
+                const credibility = data.analysis.credibility || {};
+                html = `
+                    <div class="alert alert-warning">
+                        <h3>🚔 Investigation Analysis Report</h3>
+                        
+                        <div class="metric">
+                            <label>Overall Trustworthiness:</label>
+                            <div class="progress-bar" style="width: ${(credibility.overall_trustworthiness || 0) * 100}%">
+                                ${Math.round((credibility.overall_trustworthiness || 0) * 100)}%
+                            </div>
+                        </div>
+
+                        <div class="metric">
+                            <label>Deception Probability:</label>
+                            <div class="progress-bar bg-danger" style="width: ${(credibility.deception_score?.probability || 0) * 100}%">
+                                ${Math.round((credibility.deception_score?.probability || 0) * 100)}%
+                            </div>
+                        </div>
+
+                        <h4 style="margin-top: 20px;">Full Analysis Data</h4>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div class="alert alert-success">
+                        <h3>✓ Analysis Complete</h3>
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
+            }
+
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

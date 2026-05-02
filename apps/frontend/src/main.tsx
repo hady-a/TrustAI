@@ -18,7 +18,7 @@ if (import.meta.env.PROD) {
         
         console.log('✅ Service Worker registered:', registration)
         
-        // Check for updates immediately and then every 30 seconds
+        // Check for updates immediately and then every 5 minutes (instead of 30 seconds)
         const checkUpdates = async () => {
           try {
             const updated = await registration.update()
@@ -32,8 +32,8 @@ if (import.meta.env.PROD) {
         // Check immediately
         await checkUpdates()
         
-        // Check regularly
-        setInterval(checkUpdates, 30000)
+        // Check every 5 minutes
+        setInterval(checkUpdates, 300000)
         
         // Listen for controller changes
         navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -10,9 +10,13 @@ export default function WelcomeBanner() {
       const user = JSON.parse(userStr)
       setUserName(user.name)
     }
+    console.log('[WelcomeBanner] User name loaded:', userName);
   }, [])
 
-  if (!userName) return null
+  if (!userName) {
+    console.log('[WelcomeBanner] No user name, component hidden');
+    return null;
+  }
 
   return (
     <motion.div

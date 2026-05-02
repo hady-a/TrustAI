@@ -17,6 +17,14 @@ export default defineConfig({
         entryFileNames: '[name].[hash].js',
         chunkFileNames: '[name].[hash].js',
         assetFileNames: '[name].[hash][extname]',
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-framer': ['framer-motion'],
+          'vendor-charts': ['recharts'],
+          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'docx'],
+          'vendor-ui': ['lucide-react', 'class-variance-authority'],
+          'vendor-http': ['axios'],
+        }
       },
     },
   },
