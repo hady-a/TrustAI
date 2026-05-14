@@ -36,25 +36,41 @@ const fileFilter = (
   const allowedMimes: Record<string, string[]> = {
     audio: [
       'audio/mpeg',
+      'audio/mp3',
       'audio/wav',
+      'audio/wave',
+      'audio/x-wav',
       'audio/ogg',
       'audio/m4a',
+      'audio/x-m4a',
+      'audio/mp4',
       'audio/aac',
       'audio/webm',
       'audio/flac',
-      'application/octet-stream', // Allow generic binary for testing
+      // Video containers carry audio tracks — ffmpeg extracts audio downstream.
+      'video/mp4',
+      'video/quicktime',
+      'video/webm',
+      'video/x-matroska',
+      'application/octet-stream',
     ],
     image: [
       'image/jpeg',
       'image/png',
       'image/gif',
       'image/webp',
-      'application/octet-stream', // Allow generic binary for testing
+      'application/octet-stream',
     ],
   };
 
   const allowed = allowedMimes[file.fieldname];
-  if (allowed && allowed.includes(file.mimetype)) {
+  // Permissive fallback: many browsers send audio/* or video/* with subtypes we
+  // can't enumerate exhaustively. Accept the family if the fieldname is `audio`.
+  const familyMatches =
+    file.fieldname === 'audio' &&
+    (file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/'));
+
+  if ((allowed && allowed.includes(file.mimetype)) || familyMatches) {
     cb(null, true);
   } else {
     cb(new Error(`Invalid file type for field ${file.fieldname}: ${file.mimetype}`));
@@ -97,6 +113,89 @@ const multerErrorHandler = (
   }
   next();
 };
+
+/**
+ * POST /analyze/:mode/image
+ *
+ * Image-only analysis. Flask's pipeline requires audio, so we pair the
+ * uploaded image with a generated 1s silent WAV. The face analyzer produces
+ * real data; voice/credibility components come back near-zero, which is
+ * faithful to "image only — no speech signal."
+ */
+import { exec as _exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(_exec);
+
+async function generateSilentWav(): Promise<string> {
+  const out = path.join(uploadsDir, `silent-${Date.now()}.wav`);
+  await execAsync(
+    `ffmpeg -f lavfi -i "anullsrc=r=16000:cl=mono" -t 1 -y "${out}"`,
+    { timeout: 10000 }
+  );
+  return out;
+}
+
+router.post(
+  '/analyze/:mode/image',
+  upload.single('image'),
+  multerErrorHandler,
+  async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const modeRaw = (req.params.mode || '').toLowerCase();
+    const modeMap: Record<string, 'BUSINESS' | 'INTERVIEW' | 'INVESTIGATION'> = {
+      business: 'BUSINESS',
+      interview: 'INTERVIEW',
+      investigation: 'INVESTIGATION',
+      criminal: 'INVESTIGATION',
+    };
+    const mode = modeMap[modeRaw];
+
+    let imagePath: string | undefined;
+    let silentAudioPath: string | undefined;
+
+    try {
+      if (!mode) {
+        return res.status(400).json({ success: false, error: `Unknown mode: ${modeRaw}` });
+      }
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'Image file is required' });
+      }
+      imagePath = req.file.path;
+      logger.info({ mode, imagePath }, '🖼️  Image analyze request received');
+
+      silentAudioPath = await generateSilentWav();
+
+      const result = await flaskAIService.analyze({
+        audioPath: silentAudioPath,
+        imagePath,
+        textInput: undefined,
+        mode,
+      });
+
+      if (!result.success) {
+        const errMsg = result.error || 'Image analysis failed';
+        const isUpstreamDown =
+          typeof errMsg === 'string' &&
+          /AI service unavailable|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/i.test(errMsg);
+        return res.status(isUpstreamDown ? 502 : 400).json({ success: false, error: errMsg });
+      }
+
+      const processingTime = Date.now() - startTime;
+      return res.status(200).json({ ...(result as any), processingTime });
+    } catch (error) {
+      const err = error as Error;
+      logger.error({ error: err.message }, '❌ Image analyze error');
+      return res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+    } finally {
+      try {
+        if (imagePath && (await fs.pathExists(imagePath))) await fs.remove(imagePath);
+        if (silentAudioPath && (await fs.pathExists(silentAudioPath))) await fs.remove(silentAudioPath);
+      } catch (cleanupError) {
+        logger.warn({ error: (cleanupError as Error).message }, '⚠️ Image cleanup error');
+      }
+    }
+  }
+);
 
 /**
  * POST /analyze/business
@@ -161,13 +260,21 @@ function createAnalyzeHandler(mode: 'BUSINESS' | 'INTERVIEW' | 'INVESTIGATION') 
 
       if (!result.success) {
         logger.error({ error: result.error }, `❌ Flask analysis failed for ${mode}`);
-        return res.status(400).json({ success: false, error: result.error || 'Analysis failed' });
+        const errMsg = result.error || 'Analysis failed';
+        const isUpstreamDown =
+          typeof errMsg === 'string' &&
+          /AI service unavailable|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/i.test(errMsg);
+        return res.status(isUpstreamDown ? 502 : 400).json({ success: false, error: errMsg });
       }
 
       const processingTime = Date.now() - startTime;
-      logger.info({ processingTime, confidence: result.confidence }, `✅ ${mode} analysis completed`);
+      logger.info({ processingTime, confidence: (result as any)?.data?.credibility?.confidence_level }, `✅ ${mode} analysis completed`);
 
-      return res.status(200).json({ success: true, data: result, processingTime });
+      // Transparent proxy: forward Flask's envelope unchanged so the
+      // frontend transformer can read `apiResponse.data.analysis` directly.
+      // (Previously we double-wrapped — `data.data.analysis` — which silently
+      // broke the UI's "analysis missing" guard.)
+      return res.status(200).json({ ...(result as any), processingTime });
     } catch (error) {
       const err = error as Error;
       logger.error({ error: err.message, stack: err.stack }, `❌ ${mode} route error`);

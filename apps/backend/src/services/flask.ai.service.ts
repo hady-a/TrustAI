@@ -280,6 +280,27 @@ class FlaskAIService {
         attempt,
       });
 
+      // Build a descriptive error message instead of stringifying empty values.
+      let errorMessage: string;
+      if (
+        err.code === 'ECONNREFUSED' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'EHOSTUNREACH' ||
+        err.code === 'ENOTFOUND' ||
+        (err as any).errors?.some?.((e: any) => e?.code === 'ECONNREFUSED')
+      ) {
+        errorMessage = `AI service unavailable at ${this.baseURL}. Make sure the Flask AI server is running on port 8000.`;
+      } else if (err.response?.data) {
+        const data: any = err.response.data;
+        errorMessage =
+          (typeof data === 'string' && data) ||
+          data.error ||
+          data.message ||
+          `Flask API returned ${err.response.status}`;
+      } else {
+        errorMessage = err.message || 'Unknown error contacting AI service';
+      }
+
       return {
         success: false,
         confidence: 0,
@@ -287,7 +308,7 @@ class FlaskAIService {
         agreementProbability: 0,
         prediction: 'ERROR',
         processingTime,
-        error: JSON.stringify(err.response?.data || err.message),
+        error: errorMessage,
       };
     }
   }

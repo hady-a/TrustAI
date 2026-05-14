@@ -1,7 +1,9 @@
 /**
- * Transforms nested API response data into a clean, flat object
- * Safely extracts analysis from multiple possible response structures
- * Returns consistent data structure regardless of input nesting level
+ * Clean and strict transformer for TrustAI
+ * - Uses single source of truth
+ * - No fake fallback values
+ * - Consistent types
+ * - Predictable output
  */
 
 export interface AnalysisData {
@@ -10,122 +12,183 @@ export interface AnalysisData {
   confidence: number;
   transcript: string;
   emotion: string;
-  stress: string | number;
+  stress: number;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   behavioralSignals: string[];
   summary: string;
-  metrics: {
-    credibility_score: string | number;
-    confidence_level: string | number;
-    risk_level: string;
-    voice_stress: string | number;
-    voice_emotion: string;
-    transcription: string;
+  interpretation?: {
+    recommendation?: string;
+    risk_level?: string;
+    focus_metrics?: Record<string, any>;
   };
   insights: string[];
+  // Raw analyzer outputs preserved for downstream components that key off them.
+  face?: Record<string, any>;
+  voice?: Record<string, any>;
+  credibility?: Record<string, any>;
+  metrics?: Record<string, any>;
 }
 
 /**
- * Determines risk level based on credibility score (inverted — lower credibility = higher risk)
+ * Valid risk levels
  */
-function getRiskLevel(credibilityScore: number): 'low' | 'medium' | 'high' | 'critical' {
-  if (credibilityScore <= 25) return 'critical';
-  if (credibilityScore <= 45) return 'high';
-  if (credibilityScore <= 70) return 'medium';
-  return 'low';
+const VALID_RISK_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
+
+/**
+ * Normalise an AI score to 0..1.
+ *
+ * Flask's documented contract: 0..100 (integer) for credibility_score,
+ * confidence_level, stress_level, deception_probability (when provided).
+ * Some pipelines (document mode, live chunks) hand back already-normalised
+ * 0..1 floats. We detect *type and bounds* rather than a fragile `> 1` check:
+ * if the value is in [0, 1] AND looks like a float (non-integer), it's
+ * already normalised. Otherwise we divide by 100 and clamp.
+ */
+function toUnit(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
+  // Already-normalised floats (e.g. 0.42) — pass through clamped.
+  if (raw >= 0 && raw <= 1 && !Number.isInteger(raw)) return raw;
+  // Treat as 0..100 percentage. Integers in that range, or any value > 1.
+  return Math.max(0, Math.min(1, raw / 100));
 }
 
 /**
- * Transforms raw API response into standardized analysis data
- * Handles multiple response structures and provides fallbacks
+ * Transformer function
  */
-export function transformAnalysisData(apiResponse: any): AnalysisData {
-  // Debug logging - show exact input structure
-  console.log('[transformAnalysisData] Input structure:', {
-    keys: Object.keys(apiResponse || {}),
-    hasTopLevelData: !!(apiResponse?.data),
-    hasNestedData: !!(apiResponse?.data?.data),
-    hasFace: !!(apiResponse?.face),
-    hasVoice: !!(apiResponse?.voice),
-    hasCredibility: !!(apiResponse?.credibility),
+export function transformAnalysisData(apiResponse: any): AnalysisData | null {
+  console.log('[transformAnalysisData] RAW:', apiResponse);
+
+  // ✅ STRICT SOURCE (NO MULTIPLE PATHS)
+  const analysis = apiResponse?.data?.analysis;
+  if (!analysis) {
+    console.error('Invalid API structure: missing analysis');
+    return null;
+  }
+
+  const credibility = analysis.credibility;
+  const voice = analysis.voice;
+  const face = analysis.face;
+  // Flask returns `interpretation` as a sibling of `analysis`, not inside it.
+  const interpretation = apiResponse?.data?.interpretation;
+
+  // ❌ NO FAKE DEFAULTS — FAIL FAST
+  if (
+    credibility?.credibility_score == null ||
+    (credibility?.confidence == null && credibility?.confidence_level == null)
+  ) {
+    console.error('Missing critical credibility data', credibility);
+    return null;
+  }
+
+  // ✅ CORE VALUES — normalise to 0..1 directly from Flask's documented 0..100 scale.
+  // The previous "if value > 1, divide by 100" heuristic mis-handled edge values
+  // (credibility_score = 1 was treated as already-normalised → displayed 100%).
+  // Flask's contract is stable: credibility_score, confidence_level, stress_level
+  // are integers in 0..100. We trust the contract and divide.
+  const credibilityScore = toUnit(credibility.credibility_score);
+
+  const rawConf = credibility.confidence_level ?? credibility.confidence;
+  const confidence = toUnit(rawConf);
+
+  // Deception is the complement of credibility (the AI fusion output IS the
+  // weighted sum of deception signals, so 1 - credibility is the AI-derived
+  // deception probability — not an arbitrary frontend computation).
+  const deceptionFromAi = credibility.deception_probability;
+  const deceptionScore = typeof deceptionFromAi === 'number'
+    ? toUnit(deceptionFromAi)
+    : Math.max(0, Math.min(1, 1 - credibilityScore));
+
+  // Stress is 0..100 from Flask's voice analyzer.
+  const stress = toUnit(voice?.stress?.stress_level);
+
+  // Verification log — compare raw Flask values to normalised UI values.
+  console.log('[transformAnalysisData] AI → UI', {
+    flask: {
+      credibility_score: credibility.credibility_score,
+      confidence_level: credibility.confidence_level ?? credibility.confidence,
+      stress_level: voice?.stress?.stress_level,
+      deception_probability: credibility.deception_probability ?? '(not provided by Flask — derived as 100 - credibility)',
+      risk_level: credibility.risk_level,
+    },
+    ui_percent: {
+      credibility: Math.round(credibilityScore * 100),
+      confidence: Math.round(confidence * 100),
+      deception: Math.round(deceptionScore * 100),
+      stress: Math.round(stress * 100),
+    },
   });
-  console.log('[transformAnalysisData] Full input:', JSON.stringify(apiResponse, null, 2));
 
-  // Safely extract analysis from FLAT structure (new backend format)
-  // Backend now returns: {face, voice, credibility, errors} at top level
-  // NOT nested inside data.analysis
-  const credibilityData = apiResponse?.credibility || {};
-  const voiceData = apiResponse?.voice || {};
-  const faceData = apiResponse?.face || {};
-  const stressData = voiceData?.stress || {};
-  const emotionData = voiceData?.emotion || {};
-  const transcriptionData = voiceData?.transcription || {};
+  // ✅ SAFE FIELDS
+  const emotion = face?.emotion ?? face?.dominant_emotion ?? 'Unknown';
+  const transcript = voice?.transcription?.transcript ?? '';
 
-  // Extract core values from credibility module output
-  // Fixed field names to match new backend (NO lie_probability, use deception_probability)
-  const credibilityScore = credibilityData?.credibility_score ?? credibilityData?.deception_probability ?? 50;
-  const deceptionProbability = credibilityData?.deception_probability ?? (100 - credibilityScore);
-  const confidenceLevel = credibilityData?.confidence ?? 0;
-  const riskLevelRaw = credibilityData?.risk_level ?? '';
-  const behavioralSignals: string[] = credibilityData?.behavioral_signals ?? [];
+  // ✅ SAFE RISK LEVEL — interpretation.mode_output may carry it (investigation
+  // mode), otherwise fall back to the credibility module's canonical risk_level.
+  const riskRaw = (
+    interpretation?.mode_output?.risk_level ??
+    interpretation?.risk_level ??
+    credibility?.risk_level ??
+    ''
+  )
+    .toString()
+    .toLowerCase();
+  const riskLevel: AnalysisData['riskLevel'] = VALID_RISK_LEVELS.includes(
+    riskRaw as any
+  )
+    ? (riskRaw as AnalysisData['riskLevel'])
+    : 'medium';
 
-  // Voice fields with safe access
-  const stressLevel = stressData?.stress_level ?? stressData?.level ?? 'N/A';
-  const emotion = emotionData?.emotion ?? 'Unknown';
-  const transcript = transcriptionData?.transcript ?? transcriptionData?.text ?? '(No data)';
-  const recommendation = credibilityData?.recommendation ?? 'Analysis complete';
+  // ✅ INTERPRETATION
+  const recommendation =
+    interpretation?.mode_output?.recommendation ??
+    interpretation?.recommendation ??
+    interpretation?.mode_output?.alert ??
+    'Analysis complete';
 
-  // Calculate derived scores (correct the deceptionScore calculation)
-  // Use actual deception_probability from backend if available
-  const deceptionScore = deceptionProbability !== undefined ? deceptionProbability : Math.max(0, 100 - credibilityScore);
-  const confidenceScore = (confidenceLevel || 0) / 100;
-  const riskLevel = riskLevelRaw
-    ? (riskLevelRaw.toLowerCase() as 'low' | 'medium' | 'high' | 'critical')
-    : getRiskLevel(credibilityScore);
+  const focusMetrics =
+    interpretation?.mode_output?.focus ??
+    interpretation?.focus_metrics ??
+    {};
 
-  // Generate summary
-  const summary = `${recommendation}. Risk level: ${
-    riskLevel === 'critical' ? 'Critical' : riskLevel === 'high' ? 'High' : riskLevel === 'medium' ? 'Moderate' : 'Low'
-  }`;
+  // ✅ SUMMARY
+  const summary = `${recommendation}. Risk level: ${riskLevel}`;
 
-  const result: any = {
+  const result: AnalysisData = {
     deceptionScore,
     credibilityScore,
-    confidence: confidenceScore,
+    confidence,
     transcript,
     emotion,
-    stress: stressLevel,
+    stress,
     riskLevel,
-    behavioralSignals,
-    summary,
-    face: apiResponse?.face,
-    voice: apiResponse?.voice,
-    credibility: apiResponse?.credibility,
-    metrics: {
-      voice_stress: stressLevel ?? 'N/A',
-      voice_emotion: emotion ?? 'N/A',
-      transcription: transcript || '(No data)',
-      risk_level: riskLevelRaw || 'N/A',
+    behavioralSignals: credibility?.behavioral_signals ?? [],
+    interpretation: {
+      recommendation,
+      risk_level: riskRaw || credibility?.risk_level,
+      focus_metrics: focusMetrics,
     },
+    summary,
     insights: [
-      recommendation || 'Analysis complete',
-      `Voice emotion: ${emotion || 'Unknown'}`,
-      `Stress level: ${stressLevel || 0}/100`,
-      ...behavioralSignals.slice(0, 3),
+      recommendation,
+      `Emotion: ${emotion}`,
+      `Stress: ${(stress * 100).toFixed(0)}%`,
+      ...(credibility?.behavioral_signals?.slice(0, 3) ?? []),
     ],
+    // Preserve raw analyzer outputs so downstream `checkDataAvailability` and
+    // detail panels can render face/voice/credibility sub-sections.
+    face: face ?? undefined,
+    voice: voice ?? undefined,
+    credibility: credibility ?? undefined,
+    metrics: focusMetrics && Object.keys(focusMetrics).length ? focusMetrics : undefined,
   };
 
-  // Log transformed output for verification
-  console.log('[transformAnalysisData] Transformed output:', result);
-  console.log('[transformAnalysisData] Confidence score:', confidenceScore);
-  console.log('[transformAnalysisData] Deception score:', deceptionScore);
-  console.log('[transformAnalysisData] Credibility score:', credibilityScore);
+  console.log('[transformAnalysisData] CLEAN OUTPUT:', result);
 
   return result;
 }
 
 /**
- * Validates that transformed data has required core fields
+ * Validation helper
  */
 export function isValidAnalysisData(data: AnalysisData): boolean {
   return (
@@ -133,7 +196,7 @@ export function isValidAnalysisData(data: AnalysisData): boolean {
     typeof data.credibilityScore === 'number' &&
     typeof data.confidence === 'number' &&
     typeof data.transcript === 'string' &&
-    data.metrics !== null &&
+    typeof data.stress === 'number' &&
     Array.isArray(data.insights)
   );
 }

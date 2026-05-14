@@ -25,9 +25,12 @@ import authRoutes from './routes/auth.routes';
 import analysisRoutes from './routes/analysis.routes';
 import businessAnalysisRoutes from './routes/business-analysis.routes';
 import analyzeRoutes from './routes/analyze.routes';
+import documentAnalyzeRoutes from './routes/document-analyze.routes';
 import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
 import systemSettingsRoutes from './routes/systemSettings.routes';
+import interviewRoutes from './routes/interview.routes';
+import { attachInterviewSignaling } from './services/interviewSignaling.service';
 import { pool, checkDatabaseConnection, db } from './db';
 import { users } from './db/schema/users';
 import { eq } from 'drizzle-orm';
@@ -187,6 +190,7 @@ app.post("/api/test/check-user", async (req: Request, res: Response) => {
 
 // Analyze routes (now under /api to match frontend baseURL)
 app.use('/api', analyzeRoutes);
+app.use('/api', documentAnalyzeRoutes);
 
 // API routes
 app.use('/api/auth', authRoutes);
@@ -195,6 +199,7 @@ app.use('/api/analysis/business', businessAnalysisRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', systemSettingsRoutes);
+app.use('/api/interview', interviewRoutes);
 
 // Setup Swagger documentation
 setupSwagger(app);
@@ -242,6 +247,9 @@ async function startServer() {
       logger.info(`🔑 Google OAuth: ${process.env.GOOGLE_CLIENT_ID ? 'configured' : 'NOT configured'}`);
       logger.info('\n✨ Server ready to accept requests\n');
     });
+
+    // Attach WebRTC signalling WebSocket (peers exchange offer/answer/ICE)
+    attachInterviewSignaling(server);
 
     // ========================================================================
     // GRACEFUL SHUTDOWN HANDLER

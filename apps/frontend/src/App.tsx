@@ -19,7 +19,12 @@ const CriminalAnalysis = lazy(() => import("./pages/CriminalAnalysis"))
 const InterviewAnalysis = lazy(() => import("./pages/InterviewAnalysis"))
 const BusinessAnalysis = lazy(() => import("./pages/BusinessAnalysis"))
 const MicrophoneStream = lazy(() => import("./pages/MicrophoneStream"))
+const InterviewHost = lazy(() => import("./pages/InterviewHost"))
+const InterviewGuest = lazy(() => import("./pages/InterviewGuest"))
+const BusinessMeetingHost = lazy(() => import("./pages/BusinessMeetingHost"))
+const BusinessMeetingGuest = lazy(() => import("./pages/BusinessMeetingGuest"))
 const ResultsPage = lazy(() => import("./pages/ResultsPage"))
+const ReportPreview = lazy(() => import("./pages/ReportPreview"))
 const Help = lazy(() => import("./pages/Help"))
 const AdvancedFeaturesDemo = lazy(() => import("./pages/AdvancedFeaturesDemo"))
 const AdminDashboardNew = lazy(() => import("./pages/admin/AdminDashboardNew"))
@@ -64,9 +69,14 @@ function AppRoutes() {
         <Route path="/analysis/interview" element={<MainLayout><InterviewAnalysis /></MainLayout>} />
         <Route path="/analysis/business" element={<MainLayout><BusinessAnalysis /></MainLayout>} />
         <Route path="/microphone" element={<MainLayout><MicrophoneStream /></MainLayout>} />
+        <Route path="/interview/host" element={<MainLayout><InterviewHost /></MainLayout>} />
+        <Route path="/interview/guest/:code" element={<PublicLayout><InterviewGuest /></PublicLayout>} />
+        <Route path="/business/host" element={<MainLayout><BusinessMeetingHost /></MainLayout>} />
+        <Route path="/business/guest/:code" element={<PublicLayout><BusinessMeetingGuest /></PublicLayout>} />
         <Route path="/test" element={<MainLayout><MasterTestRunnerUI /></MainLayout>} />
 
         {/* Results Pages */}
+        <Route path="/report/preview/:mode" element={<MainLayout><ReportPreview /></MainLayout>} />
         <Route path="/analysis/business/result/:id" element={<MainLayout><ResultsPage mode="BUSINESS" /></MainLayout>} />
         <Route path="/analysis/criminal/result/:id" element={<MainLayout><ResultsPage mode="CRIMINAL" /></MainLayout>} />
         <Route path="/analysis/interview/result/:id" element={<MainLayout><ResultsPage mode="INTERVIEW" /></MainLayout>} />

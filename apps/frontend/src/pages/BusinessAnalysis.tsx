@@ -1,26 +1,41 @@
-import { useState, useRef } from "react";
+/**
+ * Business analysis (upload + live entry) — same shell as InterviewAnalysis
+ * but with the business mode's gradient / icon / language and the
+ * `/analyze/business` endpoint.
+ */
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import InputMethodSelector from "../components/InputMethodSelector";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Briefcase } from "lucide-react";
 import AnalysisError from "../components/AnalysisError";
-import AnalysisProgress from "../components/AnalysisProgress";
 import AnalysisResults from "../components/AnalysisResults";
 import FileUploader from "../components/FileUploader";
+import InputTypeSelector, { type UploadKind } from "../components/InputTypeSelector";
 import { useAnalysisState } from "../hooks/useAnalysisState";
+import { transformAnalysisData } from "../utils/transformAnalysisData";
+import {
+  AmbientGlow,
+  AnalysingState,
+  BackButton,
+  CompleteHeader,
+  Hero,
+  LiveBanner,
+  UploadHeader,
+} from "./InterviewAnalysis";
+
+const MODE_KEY = "business";
+const MODE_PATH = "business";
 
 export default function BusinessAnalysis() {
   const navigate = useNavigate();
-  const [inputMethod, setInputMethod] = useState<"upload" | null>(null);
+  const [uploadKind, setUploadKind] = useState<UploadKind | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const analysis = useAnalysisState();
-
-  // Request ID tracking to prevent stale data updates (race conditions)
   const latestRequestId = useRef(0);
-  // AbortController for canceling previous requests
   const currentController = useRef<AbortController | null>(null);
 
-  const handleInputMethodSelect = (method: "upload") => {
-    setInputMethod(method);
+  const handleKindSelect = (kind: UploadKind) => {
+    setUploadKind(kind);
     analysis.clearError();
     setSelectedFile(null);
   };
@@ -30,364 +45,196 @@ export default function BusinessAnalysis() {
     analysis.clearError();
   };
 
+  const buildRequest = (kind: UploadKind, file: File): { url: string; field: string } => {
+    const apiBase = import.meta.env.VITE_API_URL || "/api";
+    if (kind === "document") return { url: `${apiBase}/analyze/${MODE_PATH}/document`, field: "document" };
+    if (kind === "image") return { url: `${apiBase}/analyze/${MODE_PATH}/image`, field: "image" };
+    // audio + video both go to the existing audio endpoint (ffmpeg extracts video audio)
+    return { url: `${apiBase}/analyze/${MODE_PATH}`, field: "audio" };
+  };
+
   const handleFileAnalysis = async () => {
     if (!selectedFile) {
       analysis.setAnalysisError("Please select a file to analyze");
       return;
     }
-
-    // Use timestamp as unique request ID for this request
+    if (!uploadKind) {
+      analysis.setAnalysisError("Please choose what you're uploading");
+      return;
+    }
     const requestId = Date.now();
     latestRequestId.current = requestId;
-    console.log(`🔢 [BusinessAnalysis] Starting request ${requestId}`);
-
-    // Abort any previous requests before starting new one
-    if (currentController.current) {
-      console.log(`🛑 [BusinessAnalysis] Aborting previous request`);
-      currentController.current.abort();
-    }
-
-    // Create new AbortController for this request
+    currentController.current?.abort();
     const controller = new AbortController();
     currentController.current = controller;
 
-    // Reset state before starting new analysis
     analysis.setLiveResult(null);
     analysis.setIsAnalyzing(true);
     analysis.setProgress(0);
     analysis.clearError();
 
     let progressInterval: ReturnType<typeof setInterval> | null = null;
-
     try {
       progressInterval = analysis.startProgress();
-
       const formData = new FormData();
-      formData.append('audio', selectedFile, selectedFile.name);
-
-      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:9999/api';
-      console.log(`📁 [BusinessAnalysis] Sending file analysis request (ID: ${requestId})`);
-      const token = localStorage.getItem('authToken');
-      const res = await fetch(`${apiBase}/analyze/business`, {
-        method: 'POST',
+      const { url, field } = buildRequest(uploadKind, selectedFile);
+      formData.append(field, selectedFile, selectedFile.name);
+      const token = localStorage.getItem("authToken");
+      const res = await fetch(url, {
+        method: "POST",
         body: formData,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        signal: controller.signal, // ← Pass abort signal
-        timeout: 120000,
+        signal: controller.signal,
       });
-
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        let msg = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) msg = errBody.error;
+          else if (errBody?.message) msg = errBody.message;
+        } catch {}
+        throw new Error(msg);
       }
-
       const response = await res.json();
-
-      // CRITICAL: Check if this is still the latest request
-      // If not, ignore the response (stale data from older request)
-      if (requestId !== latestRequestId.current) {
-        console.warn(
-          `⚠️  [BusinessAnalysis] Ignoring stale response from request ${requestId} ` +
-          `(latest is ${latestRequestId.current})`
-        );
-        return;
-      }
-
-      console.log(`✅ [BusinessAnalysis] Response received for request ${requestId}:`, response);
-
-      // Extract analysis data with safe access
-      // Backend structure: {success, data: {face, voice, credibility, errors}, timestamp, report_type}
-      const analysisData = response?.data;
-      console.log("🔍 FRONTEND DATA:", analysisData);
-      console.log("📋 Data keys:", analysisData ? Object.keys(analysisData) : 'no data');
-
-      if (!analysisData) {
-        console.error('❌ [BusinessAnalysis] No analysis data in response:', response);
-        throw new Error("Invalid response format from server");
-      }
-
-      console.log(`✅ [BusinessAnalysis] Analysis data extracted successfully for request ${requestId}`);
-      if (analysisData.id) analysis.setAnalysisId(analysisData.id);
-      analysis.setAnalysisSuccess(analysisData);
+      if (requestId !== latestRequestId.current) return;
+      analysis.setAnalysisSuccess(response);
+      try {
+        const transformed = transformAnalysisData(response);
+        if (transformed) {
+          const liveResult = {
+            timestamp: new Date().toISOString(),
+            status: "complete",
+            data: transformed,
+          };
+          sessionStorage.setItem(`trustai:lastAnalysis:${MODE_KEY}`, JSON.stringify(liveResult));
+        }
+      } catch {}
     } catch (err) {
-      // Ignore abort errors (expected when canceling previous requests)
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log(`ℹ️  [BusinessAnalysis] Request ${requestId} was cancelled`);
-        return;
-      }
-
-      // Only show error if this is still the latest request
+      if (err instanceof Error && err.name === "AbortError") return;
       if (requestId === latestRequestId.current) {
-        const errorMessage = err instanceof Error ? err.message : "Analysis failed";
-        console.error(`❌ [BusinessAnalysis] File analysis error (request ${requestId}):`, errorMessage);
-        analysis.setAnalysisError(errorMessage);
+        analysis.setAnalysisError(err instanceof Error ? err.message : "Analysis failed");
       }
     } finally {
       if (progressInterval) clearInterval(progressInterval);
-      // Only reset analyzing if this was the latest request
-      if (requestId === latestRequestId.current) {
-        analysis.setIsAnalyzing(false);
-      }
+      if (requestId === latestRequestId.current) analysis.setIsAnalyzing(false);
     }
   };
 
   const handleReset = () => {
     analysis.resetState();
-    setInputMethod(null);
+    setUploadKind(null);
     setSelectedFile(null);
   };
 
-  // Show input method selector
-  if (inputMethod === null && !analysis.isAnalyzing && !analysis.analysisComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ scale: [1, 1.15, 1] }}
-            transition={{ duration: 3, repeat: Infinity }}
-            className="absolute top-1/3 left-1/4 w-52 h-52 bg-green-500/15 rounded-full blur-3xl"
-          />
-          <motion.div
-            animate={{ scale: [1.15, 1, 1.15] }}
-            transition={{ duration: 4, repeat: Infinity }}
-            className="absolute bottom-1/4 right-1/4 w-52 h-52 bg-emerald-600/10 rounded-full blur-3xl"
-          />
-        </div>
-
-        <div className="relative z-10 max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="grid md:grid-cols-2 gap-12 items-center mb-12"
-          >
-            <div>
-              <h1 className="text-6xl md:text-7xl font-black text-white mb-4 tracking-tighter">
-                Business<br />
-                <span className="bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">Analysis</span>
-              </h1>
-              <p className="text-gray-400 text-lg max-w-xl">
-                Analyze business meetings, negotiations, and interviews for credibility and competence
-              </p>
-            </div>
-            <motion.div
-              animate={{ rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 4, repeat: Infinity }}
-              className="text-9xl drop-shadow-2xl"
-            >
-              💼
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-[#070b14] text-white">
+      <AmbientGlow tones={["from-amber-500/10", "from-emerald-500/10"]} />
+      <div className="relative z-10 max-w-6xl mx-auto px-6 py-12">
+        <AnimatePresence mode="wait">
+          {uploadKind === null && !analysis.isAnalyzing && !analysis.analysisComplete && (
+            <motion.div key="hero" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <Hero
+                kicker="Business mode"
+                title="Business"
+                titleAccent="Analysis"
+                accentGradient="from-amber-300 via-amber-400 to-emerald-400"
+                description="Evaluate the credibility, stress, and tone of a business conversation. Get a PROCEED / DUE-DILIGENCE / DROP recommendation."
+                Icon={Briefcase}
+              />
+              <LiveBanner
+                title="Host a live business meeting"
+                description="Generate a join code, talk with your counterpart on camera, and receive a deal-likelihood recommendation after the meeting ends."
+                onClick={() => navigate("/business/host")}
+                gradient="from-amber-500 to-emerald-500"
+                shadow="shadow-amber-500/25"
+                cta="Start live meeting"
+              />
+              <InputTypeSelector onSelect={handleKindSelect} isLoading={analysis.isAnalyzing} />
+              <BackButton onClick={() => navigate(-1)} />
             </motion.div>
-          </motion.div>
-
-          <InputMethodSelector onSelect={handleInputMethodSelect} isLoading={analysis.isAnalyzing} />
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(-1)}
-            className="mt-12 px-8 py-3 border-2 border-gray-600 text-gray-300 rounded-lg font-bold hover:border-gray-500 transition-all mx-auto block"
-          >
-            ← Back
-          </motion.button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show file upload
-  if (inputMethod === "upload" && !analysis.isAnalyzing && !analysis.analysisComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ scale: [1, 1.15, 1] }}
-            transition={{ duration: 3, repeat: Infinity }}
-            className="absolute top-1/3 left-1/4 w-52 h-52 bg-green-500/15 rounded-full blur-3xl"
-          />
-        </div>
-
-        <div className="relative z-10 max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-12"
-          >
-            <button
-              onClick={() => setInputMethod(null)}
-              className="text-gray-400 hover:text-gray-300 font-semibold flex items-center gap-2 mb-6"
-            >
-              ← Change Input Method
-            </button>
-            <h2 className="text-4xl font-bold text-white">Upload Business File</h2>
-            <p className="text-gray-400 mt-2">Upload audio or video file for analysis</p>
-          </motion.div>
-
-          {analysis.error && (
-            <AnalysisError
-              message={analysis.error}
-              onRetry={() => {
-                analysis.handleRetry();
-                if (selectedFile) handleFileAnalysis();
-              }}
-            />
           )}
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="mb-12"
-          >
-            <FileUploader onFileSelect={handleFileSelect} />
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center"
-          >
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setInputMethod(null)}
-              className="px-8 py-3 border-2 border-gray-600 text-gray-300 rounded-lg font-bold hover:border-gray-500 transition-all"
-            >
-              ← Back
-            </motion.button>
-            <motion.button
-              whileHover={selectedFile ? { scale: 1.05 } : {}}
-              whileTap={selectedFile ? { scale: 0.95 } : {}}
-              onClick={handleFileAnalysis}
-              disabled={!selectedFile}
-              className={`px-10 py-3 rounded-lg font-bold transition-all ${
-                selectedFile
-                  ? "bg-gradient-to-r from-green-600 to-emerald-700 text-white hover:shadow-2xl hover:shadow-green-600/50 shadow-lg"
-                  : "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-              }`}
-            >
-              💼 {selectedFile ? "ANALYZE BUSINESS" : "SELECT FILE"}
-            </motion.button>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show analyzing state
-  if (analysis.isAnalyzing) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden flex items-center justify-center py-20 px-6">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ scale: [1, 1.15, 1] }}
-            transition={{ duration: 3, repeat: Infinity }}
-            className="absolute top-1/3 left-1/4 w-52 h-52 bg-green-500/15 rounded-full blur-3xl"
-          />
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="relative z-10 max-w-2xl w-full text-center"
-        >
-          <motion.div className="inline-block mb-8 p-8 rounded-lg bg-gradient-to-br from-green-700/20 to-emerald-900/20 border-2 border-green-700">
-            <div className="flex items-center justify-center gap-2 h-16">
-              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-                <motion.div
-                  key={i}
-                  animate={{ height: [20, 60, 20] }}
-                  transition={{ duration: 1, repeat: Infinity, delay: i * 0.1 }}
-                  className="w-2 bg-gradient-to-t from-green-500 to-emerald-400 rounded-full"
+          {uploadKind !== null && !analysis.isAnalyzing && !analysis.analysisComplete && (
+            <motion.div key="upload" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <UploadHeader title={`Upload ${uploadKind}`} onBack={() => setUploadKind(null)} />
+              {analysis.error && (
+                <AnalysisError
+                  message={analysis.error}
+                  onRetry={() => {
+                    analysis.handleRetry();
+                    if (selectedFile) handleFileAnalysis();
+                  }}
                 />
-              ))}
-            </div>
-          </motion.div>
-
-          <h2 className="text-4xl font-black text-white mb-2">ANALYZING CONVERSATION</h2>
-          <p className="text-gray-400 text-lg mb-8">Extracting business insights...</p>
-
-          <AnalysisProgress progress={analysis.progress} isAnalyzing={analysis.isAnalyzing} />
-
-          <motion.div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { stage: "Transcribe", icon: "📝" },
-              { stage: "Analyze", icon: "🎯" },
-              { stage: "Report", icon: "📊" },
-            ].map((item, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + i * 0.1 }}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  analysis.progress > i * 35 ? "border-green-600 bg-green-900/20" : "border-gray-700/50 bg-gray-900/20"
-                }`}
-              >
-                <p className="text-2xl mb-2">{item.icon}</p>
-                <p className={`font-bold ${analysis.progress > i * 35 ? "text-green-300" : "text-gray-400"}`}>{item.stage}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Show completion state
-  if (analysis.analysisComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0A1128] via-[#0f1a2e] to-[#0A1128] relative overflow-hidden py-20 px-6">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <motion.div
-            animate={{ scale: [1, 1.15, 1] }}
-            transition={{ duration: 3, repeat: Infinity }}
-            className="absolute top-1/3 left-1/4 w-52 h-52 bg-green-500/15 rounded-full blur-3xl"
-          />
-        </div>
-
-        <div className="relative z-10 max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center mb-12"
-          >
-            <motion.div
-              initial={{ scale: 0, rotate: 180 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="inline-block mb-6"
-            >
-              <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-green-600/40 to-green-900/40 border-2 border-green-700 flex items-center justify-center text-5xl">
-                ✓
+              )}
+              <FileUploader onFileSelect={handleFileSelect} kind={uploadKind} />
+              <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8">
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => setUploadKind(null)}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] text-sm font-medium transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </motion.button>
+                <motion.button
+                  whileHover={selectedFile ? { scale: 1.04 } : undefined}
+                  whileTap={selectedFile ? { scale: 0.96 } : undefined}
+                  onClick={handleFileAnalysis}
+                  disabled={!selectedFile}
+                  className={`inline-flex items-center justify-center gap-2 px-8 py-3 rounded-2xl font-semibold transition-all ${
+                    selectedFile
+                      ? "bg-gradient-to-r from-amber-500 to-emerald-500 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40"
+                      : "bg-white/[0.04] text-slate-500 cursor-not-allowed"
+                  }`}
+                >
+                  {selectedFile ? "Analyse meeting" : "Select a file first"}
+                  {selectedFile && <ArrowRight className="h-4 w-4" />}
+                </motion.button>
               </div>
             </motion.div>
-            <h2 className="text-5xl font-black text-white mb-3">ANALYSIS COMPLETE</h2>
-            <p className="text-gray-400 text-lg">Business meeting analyzed and insights extracted</p>
-          </motion.div>
+          )}
 
-          <AnalysisResults
-            liveResult={analysis.liveResult}
-            analysisId={analysis.analysisId}
-            onReset={handleReset}
-          />
+          {analysis.isAnalyzing && (
+            <motion.div key="busy" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <AnalysingState progress={analysis.progress} accent="amber" />
+            </motion.div>
+          )}
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center mt-8"
-          >
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate(`/analysis/business/result/${analysis.analysisId}`)}
-              className="px-12 py-4 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-lg font-bold hover:shadow-2xl hover:shadow-green-600/50 transition-all shadow-lg"
-            >
-              📊 VIEW FULL REPORT
-            </motion.button>
-          </motion.div>
-        </div>
+          {analysis.analysisComplete && !analysis.isAnalyzing && (
+            <motion.div key="done" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <CompleteHeader
+                title="Analysis complete"
+                subtitle="Business signals scored — view your full deal recommendation."
+              />
+              <AnalysisResults
+                liveResult={analysis.liveResult as any}
+                onReset={handleReset}
+              />
+              <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8">
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={handleReset}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] text-sm font-medium transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  New analysis
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => navigate(`/report/preview/business`)}
+                  className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-2xl font-semibold bg-gradient-to-r from-amber-500 to-emerald-500 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-shadow"
+                >
+                  View full report
+                  <ArrowRight className="h-4 w-4" />
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    );
-  }
+    </div>
+  );
 }
